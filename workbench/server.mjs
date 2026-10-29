@@ -301,6 +301,32 @@ function youtubeVideoId(input) {
   return null;
 }
 
+async function githubApi(path) {
+  const response = await fetch(`https://api.github.com${path}`, { headers: { accept: "application/vnd.github+json", "x-github-api-version": "2022-11-28", "user-agent": "REA-Workbench" } });
+  const data = await response.json();
+  if (!response.ok) {
+    const reset = response.headers.get("x-ratelimit-reset");
+    const wait = reset ? ` Try again after ${new Date(Number(reset) * 1000).toLocaleTimeString()}.` : "";
+    throw new Error(`${data.message ?? `GitHub API returned HTTP ${response.status}`}${wait}`);
+  }
+  return data;
+}
+
+async function githubSearch(query, sort) {
+  const params = new URLSearchParams({ q: query, sort, order: "desc", per_page: "10" });
+  const result = await githubApi(`/search/repositories?${params}`);
+  return (result.items ?? []).map((repo) => ({ name: repo.full_name, description: repo.description ?? "", url: repo.html_url, stars: repo.stargazers_count ?? 0, forks: repo.forks_count ?? 0, issues: repo.open_issues_count ?? 0, language: repo.language ?? "", license: repo.license?.spdx_id ?? "", updatedAt: repo.updated_at, defaultBranch: repo.default_branch }));
+}
+
+async function githubRepoDetails(owner, repo) {
+  const base = `/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}`;
+  const [releases, issues] = await Promise.all([githubApi(`${base}/releases?per_page=5`), githubApi(`${base}/issues?state=open&sort=updated&direction=desc&per_page=10`)]);
+  return {
+    releases: releases.map((item) => ({ tag: item.tag_name, name: item.name ?? item.tag_name, publishedAt: item.published_at, url: item.html_url, prerelease: item.prerelease })),
+    issues: issues.filter((item) => !item.pull_request).slice(0, 5).map((item) => ({ number: item.number, title: item.title, state: item.state, updatedAt: item.updated_at, url: item.html_url, labels: item.labels.map((label) => label.name) })),
+  };
+}
+
 function localChromeEndpoint(input) {
   let endpoint;
   try { endpoint = new URL(input || "http://127.0.0.1:9222"); } catch { throw new Error("Enter a valid local Chrome DevTools URL."); }
@@ -483,6 +509,18 @@ export const server = createServer(async (req, res) => {
       if (!channel || channel.length > 100) return send(res, 400, { error: "Enter a channel ID or @handle up to 100 characters." });
       const limit = Math.min(250, Math.max(1, Number(url.searchParams.get("limit") ?? 50) || 50));
       return send(res, 200, await youtubeChannel(channel, limit));
+    }
+    if (req.method === "GET" && url.pathname === "/api/github/search") {
+      const query = (url.searchParams.get("q") ?? "").trim();
+      const sort = url.searchParams.get("sort") ?? "stars";
+      if (!query || query.length > 256) return send(res, 400, { error: "Enter a GitHub repository search up to 256 characters." });
+      if (!["stars", "updated"].includes(sort)) return send(res, 400, { error: "Sort must be stars or updated." });
+      return send(res, 200, { repositories: await githubSearch(query, sort) });
+    }
+    if (req.method === "GET" && url.pathname.startsWith("/api/github/repos/")) {
+      const match = /^\/api\/github\/repos\/([A-Za-z0-9_.-]{1,100})\/([A-Za-z0-9_.-]{1,100})$/.exec(url.pathname);
+      if (!match) return send(res, 400, { error: "Enter a valid public owner/repository name." });
+      return send(res, 200, await githubRepoDetails(match[1], match[2]));
     }
     if (req.method === "POST" && url.pathname === "/auth/disconnect") {
       const origin = req.headers.origin;

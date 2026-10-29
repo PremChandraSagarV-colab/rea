@@ -26,6 +26,11 @@ globalThis.fetch = async (input, init) => {
     if (url.pathname.endsWith("/playlistItems")) return Response.json({ items: [{ contentDetails: { videoId: "abcdefghijk" } }, { contentDetails: { videoId: "lmnopqrstuv" } }] });
     if (url.pathname.endsWith("/videos")) return Response.json({ items: url.searchParams.get("id").split(",").map(apiVideo) });
   }
+  if (url.hostname === "api.github.com") {
+    if (url.pathname === "/search/repositories") return Response.json({ items: [{ full_name: "sample/project", description: "Test project", html_url: "https://github.com/sample/project", stargazers_count: 12, forks_count: 2, open_issues_count: 1, language: "TypeScript", license: { spdx_id: "MIT" }, updated_at: "2025-01-01T00:00:00Z", default_branch: "main" }] });
+    if (url.pathname.endsWith("/releases")) return Response.json([{ tag_name: "v1.0.0", name: "1.0", published_at: "2025-01-01T00:00:00Z", html_url: "https://github.com/sample/project/releases/tag/v1.0.0", prerelease: false }]);
+    if (url.pathname.endsWith("/issues")) return Response.json([{ number: 7, title: "Improve docs", updated_at: "2025-01-01T00:00:00Z", html_url: "https://github.com/sample/project/issues/7", labels: [{ name: "docs" }] }]);
+  }
   throw new Error(`Unexpected mock request: ${url.href}`);
 };
 
@@ -49,5 +54,7 @@ assert.equal((await response.json()).videos[0].title, "Video abcdefghijk");
 response = await fetch(`${origin}/api/youtube/channel?channel=%40sample&limit=2`);
 const channel = await response.json(); assert.equal(channel.videos.length, 2); assert.equal(channel.channel.title, "Example Channel");
 response = await fetch(`${origin}/api/chrome/targets?endpoint=https%3A%2F%2Fexample.com`); assert.equal(response.status, 400);
-console.log("mock integration passed: Gmail search/body/attachment, YouTube search/video URL/channel uploads, Chrome loopback guard");
+response = await fetch(`${origin}/api/github/search?q=agents`); assert.equal((await response.json()).repositories[0].name, "sample/project");
+response = await fetch(`${origin}/api/github/repos/sample/project`); assert.equal((await response.json()).issues[0].number, 7);
+console.log("mock integration passed: Gmail search/body/attachment, YouTube search/video URL/channel uploads, GitHub repo/release/issue browsing, Chrome loopback guard");
 await new Promise((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));

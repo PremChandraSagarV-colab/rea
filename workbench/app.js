@@ -78,6 +78,44 @@ $("#web-scrape-form").addEventListener("submit", async (event) => {
   } catch (error) { showMessage(results, error.message, "error"); }
 });
 
+let latestRepositories = [];
+$("#github-form").addEventListener("submit", async (event) => {
+  event.preventDefault(); const results = $("#github-results"); showMessage(results, "Searching public repositories…", "loading");
+  try {
+    const query = new URLSearchParams({ q: $("#github-query").value, sort: $("#github-sort").value });
+    const response = await fetch(`/api/github/search?${query}`); const data = await response.json(); if (!response.ok) throw new Error(data.error ?? "GitHub search failed");
+    latestRepositories = data.repositories; results.replaceChildren();
+    const exportButton = Object.assign(document.createElement("button"), { className: "copy export-button", textContent: "Download JSON" });
+    exportButton.addEventListener("click", () => downloadJson("github-repositories.json", latestRepositories)); results.append(exportButton);
+    if (!data.repositories.length) { showMessage(results, "No public repositories matched."); return; }
+    for (const repo of data.repositories) {
+      const card = document.createElement("article"); card.className = "repo-result";
+      const head = document.createElement("div"); head.className = "repo-head";
+      const name = Object.assign(document.createElement("a"), { href: repo.url, target: "_blank", rel: "noreferrer", textContent: repo.name }); name.className = "repo-name"; head.append(name);
+      const activity = Object.assign(document.createElement("button"), { className: "copy", textContent: "Releases & issues" }); head.append(activity); card.append(head);
+      card.append(Object.assign(document.createElement("p"), { className: "scrape-description", textContent: repo.description || "No description." }));
+      card.append(Object.assign(document.createElement("small"), { textContent: `${repo.language || "Language n/a"} · ${repo.license || "License n/a"} · ★ ${Number(repo.stars).toLocaleString()} · ⑂ ${Number(repo.forks).toLocaleString()} · updated ${new Date(repo.updatedAt).toLocaleDateString()}` }));
+      const detail = document.createElement("div"); detail.className = "repo-detail"; card.append(detail);
+      activity.addEventListener("click", async () => {
+        activity.disabled = true; activity.textContent = "Loading…";
+        try {
+          const path = repo.name.split("/").map(encodeURIComponent).join("/"); const response = await fetch(`/api/github/repos/${path}`); const data = await response.json(); if (!response.ok) throw new Error(data.error ?? "Could not load repository activity");
+          detail.replaceChildren();
+          const releases = document.createElement("div"); releases.append(Object.assign(document.createElement("strong"), { textContent: "Recent releases" }));
+          if (!data.releases.length) releases.append(Object.assign(document.createElement("p"), { className: "empty", textContent: "No published releases." }));
+          for (const release of data.releases) { const link = Object.assign(document.createElement("a"), { href: release.url, target: "_blank", rel: "noreferrer", textContent: `${release.tag} · ${release.publishedAt ? new Date(release.publishedAt).toLocaleDateString() : "unpublished"}${release.prerelease ? " · prerelease" : ""}` }); releases.append(link); }
+          const issues = document.createElement("div"); issues.append(Object.assign(document.createElement("strong"), { textContent: "Recently updated open issues" }));
+          if (!data.issues.length) issues.append(Object.assign(document.createElement("p"), { className: "empty", textContent: "No open issues." }));
+          for (const issue of data.issues) { const link = Object.assign(document.createElement("a"), { href: issue.url, target: "_blank", rel: "noreferrer", textContent: `#${issue.number} ${issue.title}` }); issues.append(link); }
+          detail.append(releases, issues); activity.textContent = "Activity loaded";
+        } catch (error) { detail.replaceChildren(Object.assign(document.createElement("p"), { className: "error", textContent: error.message })); activity.textContent = "Try again"; }
+        finally { activity.disabled = false; }
+      });
+      results.append(card);
+    }
+  } catch (error) { showMessage(results, error.message, "error"); }
+});
+
 let chromeTargets = [];
 function chromeQuery() {
   return new URLSearchParams({ endpoint: $("#chrome-endpoint").value.trim() || "http://127.0.0.1:9222" });

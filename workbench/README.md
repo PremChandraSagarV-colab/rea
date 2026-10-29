@@ -29,6 +29,10 @@ The workbench only connects to `localhost`, `127.0.0.1`, or `::1`; it can list o
 
 Enter one to ten public HTML or plain-text page URLs, optionally with a CSS selector. It extracts the page title, description, canonical URL, headings, up to 100 links, and up to 30,000 characters of readable text. Requests follow the site's `robots.txt` rules and are limited to standard web ports, five redirects, 15 seconds, and 5 MB per page. Local/private/reserved IP targets and non-HTML resources are blocked. The scraper does not execute page JavaScript, load browser sessions, or bypass access controls; single-page apps may need the local Chrome/REA workflows instead.
 
+## GitHub explorer
+
+Search public repositories by language, topic, or name, then inspect recent published releases and open issues. It uses the official unauthenticated REST API for public repositories, so it does not expose private GitHub account data and is subject to GitHub's public API rate limits.
+
 ## Gmail setup
 
 Create a Google OAuth client of type **Web application**, enable the Gmail API, and register the callback URL exactly as `GOOGLE_REDIRECT_URI`. For local work, use `http://localhost:3000/auth/google/callback`. Set `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, and `GOOGLE_REDIRECT_URI` in `workbench/.env`. The app asks only for `gmail.readonly`: it searches message metadata/snippets, opens full text on request, and downloads selected attachments. It cannot send, modify, or delete email. Google classifies `gmail.readonly` as a restricted scope; review its current verification requirements before offering this app to other users. Access and refresh tokens are held in process memory for a 24-hour inactive session; nothing is stored in a mailbox database or on disk. Access tokens refresh automatically while the service process is running. Restarting the server disconnects the session. The Disconnect button ends the current app session; revoke the app separately from your Google Account permissions to remove its grant.
