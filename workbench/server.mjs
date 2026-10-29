@@ -247,15 +247,60 @@ async function youtubeSearch(query, maxResults) {
   const data = await response.json();
   if (!response.ok) throw new Error(data.error?.message ?? `YouTube API returned HTTP ${response.status}.`);
   const ids = (data.items ?? []).map((item) => item.id?.videoId).filter(Boolean);
-  if (!ids.length) return [];
-  const detailsParams = new URLSearchParams({ key: process.env.YOUTUBE_API_KEY, part: "snippet,contentDetails,statistics", id: ids.join(",") });
-  const detailsResponse = await fetch(`https://www.googleapis.com/youtube/v3/videos?${detailsParams}`);
-  const details = await detailsResponse.json();
-  if (!detailsResponse.ok) throw new Error(details.error?.message ?? `YouTube API returned HTTP ${detailsResponse.status}.`);
-  return (details.items ?? []).map((video) => ({ id: video.id, title: video.snippet?.title ?? "", description: video.snippet?.description ?? "", channel: video.snippet?.channelTitle ?? "", publishedAt: video.snippet?.publishedAt ?? "", duration: video.contentDetails?.duration ?? "", views: video.statistics?.viewCount ?? "", likes: video.statistics?.likeCount ?? "", thumbnail: video.snippet?.thumbnails?.medium?.url ?? video.snippet?.thumbnails?.default?.url ?? "", url: `https://www.youtube.com/watch?v=${video.id}`, captions: video.contentDetails?.caption === "true" }));
+  return youtubeVideos(ids);
 }
 
-const server = createServer(async (req, res) => {
+async function youtubeVideos(ids) {
+  if (!ids.length) return [];
+  const videos = [];
+  for (let i = 0; i < ids.length; i += 50) {
+    const detailsParams = new URLSearchParams({ key: process.env.YOUTUBE_API_KEY, part: "snippet,contentDetails,statistics", id: ids.slice(i, i + 50).join(",") });
+    const detailsResponse = await fetch(`https://www.googleapis.com/youtube/v3/videos?${detailsParams}`);
+    const details = await detailsResponse.json();
+    if (!detailsResponse.ok) throw new Error(details.error?.message ?? `YouTube API returned HTTP ${detailsResponse.status}.`);
+    videos.push(...(details.items ?? []).map((video) => ({ id: video.id, title: video.snippet?.title ?? "", description: video.snippet?.description ?? "", channel: video.snippet?.channelTitle ?? "", publishedAt: video.snippet?.publishedAt ?? "", duration: video.contentDetails?.duration ?? "", views: video.statistics?.viewCount ?? "", likes: video.statistics?.likeCount ?? "", thumbnail: video.snippet?.thumbnails?.medium?.url ?? video.snippet?.thumbnails?.default?.url ?? "", url: `https://www.youtube.com/watch?v=${video.id}`, captions: video.contentDetails?.caption === "true" })));
+  }
+  return videos;
+}
+
+async function youtubeChannel(input, limit) {
+  const channelQuery = new URLSearchParams({ key: process.env.YOUTUBE_API_KEY, part: "snippet,contentDetails,statistics" });
+  if (/^UC[\w-]{22}$/.test(input)) channelQuery.set("id", input);
+  else channelQuery.set("forHandle", input.replace(/^@/, ""));
+  const channelResponse = await fetch(`https://www.googleapis.com/youtube/v3/channels?${channelQuery}`);
+  const channelData = await channelResponse.json();
+  if (!channelResponse.ok) throw new Error(channelData.error?.message ?? `YouTube API returned HTTP ${channelResponse.status}.`);
+  const channel = channelData.items?.[0]; if (!channel) throw new Error("No public channel matched that channel ID or @handle.");
+  const uploadsId = channel.contentDetails?.relatedPlaylists?.uploads;
+  if (!uploadsId) throw new Error("The channel's public uploads playlist is unavailable.");
+  const ids = []; let pageToken = "";
+  while (ids.length < limit) {
+    const params = new URLSearchParams({ key: process.env.YOUTUBE_API_KEY, part: "snippet", playlistId: uploadsId, maxResults: String(Math.min(50, limit - ids.length)) });
+    if (pageToken) params.set("pageToken", pageToken);
+    const response = await fetch(`https://www.googleapis.com/youtube/v3/playlistItems?${params}`);
+    const page = await response.json();
+    if (!response.ok) throw new Error(page.error?.message ?? `YouTube API returned HTTP ${response.status}.`);
+    ids.push(...(page.items ?? []).map((item) => item.contentDetails?.videoId ?? item.snippet?.resourceId?.videoId).filter(Boolean));
+    pageToken = page.nextPageToken ?? ""; if (!pageToken) break;
+  }
+  const videos = await youtubeVideos(ids);
+  return { channel: { id: channel.id, title: channel.snippet?.title ?? "", description: channel.snippet?.description ?? "", url: `https://www.youtube.com/channel/${channel.id}`, subscribers: channel.statistics?.subscriberCount ?? "", totalViews: channel.statistics?.viewCount ?? "", videoCount: channel.statistics?.videoCount ?? "" }, videos };
+}
+
+function youtubeVideoId(input) {
+  if (/^[\w-]{11}$/.test(input)) return input;
+  try {
+    const url = new URL(input); const host = url.hostname.toLowerCase();
+    if (host === "youtu.be") return url.pathname.split("/").filter(Boolean)[0] ?? null;
+    if (["youtube.com", "www.youtube.com", "m.youtube.com"].includes(host)) {
+      if (url.pathname === "/watch") return url.searchParams.get("v");
+      const match = /^\/(?:shorts|embed|live)\/([\w-]{11})/.exec(url.pathname); return match?.[1] ?? null;
+    }
+  } catch {}
+  return null;
+}
+
+export const server = createServer(async (req, res) => {
   try {
     const url = new URL(req.url, `http://${req.headers.host ?? "localhost"}`);
     if (url.pathname === "/auth/google/callback") {
@@ -353,6 +398,20 @@ const server = createServer(async (req, res) => {
       if (!query || query.length > 300) return send(res, 400, { error: "Enter a YouTube query up to 300 characters." });
       const count = Math.min(25, Math.max(1, Number(url.searchParams.get("limit") ?? 10) || 10));
       return send(res, 200, { videos: await youtubeSearch(query, count) });
+    }
+    if (req.method === "POST" && url.pathname === "/api/youtube/videos") {
+      if (!process.env.YOUTUBE_API_KEY) return send(res, 503, { error: "Set YOUTUBE_API_KEY to enable official YouTube collection." });
+      const input = await readJson(req);
+      const ids = Array.isArray(input.videos) ? input.videos.map((item) => typeof item === "string" ? youtubeVideoId(item.trim()) : null) : [];
+      if (!ids.length || ids.length > 50 || ids.some((id) => !id)) return send(res, 400, { error: "Provide 1 to 50 valid YouTube video IDs or video URLs." });
+      return send(res, 200, { videos: await youtubeVideos([...new Set(ids)]) });
+    }
+    if (req.method === "GET" && url.pathname === "/api/youtube/channel") {
+      if (!process.env.YOUTUBE_API_KEY) return send(res, 503, { error: "Set YOUTUBE_API_KEY to enable official YouTube collection." });
+      const channel = (url.searchParams.get("channel") ?? "").trim();
+      if (!channel || channel.length > 100) return send(res, 400, { error: "Enter a channel ID or @handle up to 100 characters." });
+      const limit = Math.min(250, Math.max(1, Number(url.searchParams.get("limit") ?? 50) || 50));
+      return send(res, 200, await youtubeChannel(channel, limit));
     }
     if (req.method === "POST" && url.pathname === "/auth/disconnect") {
       const origin = req.headers.origin;

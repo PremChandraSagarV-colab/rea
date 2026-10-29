@@ -78,26 +78,42 @@ $("#web-scrape-form").addEventListener("submit", async (event) => {
   } catch (error) { showMessage(results, error.message, "error"); }
 });
 
-$("#youtube-form").addEventListener("submit", async (event) => {
-  event.preventDefault(); const results = $("#youtube-results"); showMessage(results, "Searching YouTube…", "loading");
-  try {
-    const query = new URLSearchParams({ q: $("#youtube-query").value, limit: $("#youtube-limit").value });
-    const response = await fetch(`/api/youtube/search?${query}`); const data = await response.json(); if (!response.ok) throw new Error(data.error ?? "YouTube search failed");
-    latestVideos = data.videos; results.replaceChildren();
-    const exportButton = Object.assign(document.createElement("button"), { className: "copy export-button", textContent: "Download JSON" });
-    exportButton.addEventListener("click", () => downloadJson("youtube-video-results.json", latestVideos)); results.append(exportButton);
-    if (!data.videos.length) { showMessage(results, "No videos matched."); return; }
-    for (const video of data.videos) {
-      const card = document.createElement("article"); card.className = "video-result";
-      if (video.thumbnail) { const image = Object.assign(document.createElement("img"), { src: video.thumbnail, alt: "", loading: "lazy" }); card.append(image); }
-      const content = document.createElement("div");
-      const title = Object.assign(document.createElement("a"), { href: video.url, target: "_blank", rel: "noreferrer", textContent: video.title }); title.className = "video-title"; content.append(title);
-      content.append(Object.assign(document.createElement("p"), { className: "scrape-description", textContent: `${video.channel} · ${video.publishedAt ? new Date(video.publishedAt).toLocaleDateString() : "date unavailable"} · ${Number(video.views || 0).toLocaleString()} views` }));
-      content.append(Object.assign(document.createElement("p"), { className: "scrape-text", textContent: video.description || "No description." }));
-      content.append(Object.assign(document.createElement("small"), { textContent: `Duration ${video.duration || "unknown"} · Captions ${video.captions ? "available on video (download may require owner authorization)" : "not listed"}` }));
-      card.append(content); results.append(card);
-    }
-  } catch (error) { showMessage(results, error.message, "error"); }
+function renderYoutubeVideos(container, videos, channel = null) {
+  latestVideos = videos; container.replaceChildren();
+  if (channel) {
+    const title = Object.assign(document.createElement("h3"), { className: "channel-title", textContent: `${channel.title} · ${Number(channel.videoCount || 0).toLocaleString()} videos` }); container.append(title);
+    const stats = Object.assign(document.createElement("p"), { className: "scrape-description", textContent: `${Number(channel.subscribers || 0).toLocaleString()} subscribers · ${Number(channel.totalViews || 0).toLocaleString()} total views` }); container.append(stats);
+  }
+  const exportButton = Object.assign(document.createElement("button"), { className: "copy export-button", textContent: "Download JSON" });
+  exportButton.addEventListener("click", () => downloadJson("youtube-video-results.json", channel ? { channel, videos: latestVideos } : latestVideos)); container.append(exportButton);
+  if (!videos.length) { showMessage(container, "No videos found."); return; }
+  for (const video of videos) {
+    const card = document.createElement("article"); card.className = "video-result";
+    if (video.thumbnail) { const image = Object.assign(document.createElement("img"), { src: video.thumbnail, alt: "", loading: "lazy" }); card.append(image); }
+    const content = document.createElement("div");
+    const title = Object.assign(document.createElement("a"), { href: video.url, target: "_blank", rel: "noreferrer", textContent: video.title }); title.className = "video-title"; content.append(title);
+    content.append(Object.assign(document.createElement("p"), { className: "scrape-description", textContent: `${video.channel} · ${video.publishedAt ? new Date(video.publishedAt).toLocaleDateString() : "date unavailable"} · ${Number(video.views || 0).toLocaleString()} views` }));
+    content.append(Object.assign(document.createElement("p"), { className: "scrape-text", textContent: video.description || "No description." }));
+    content.append(Object.assign(document.createElement("small"), { textContent: `Duration ${video.duration || "unknown"} · Captions ${video.captions ? "available on video (download may require owner authorization)" : "not listed"}` }));
+    card.append(content); container.append(card);
+  }
+}
+async function showYoutubeResponse(responsePromise, loadingText) {
+  const results = $("#youtube-results"); showMessage(results, loadingText, "loading");
+  try { const response = await responsePromise; const data = await response.json(); if (!response.ok) throw new Error(data.error ?? "YouTube collection failed"); renderYoutubeVideos(results, data.videos, data.channel); }
+  catch (error) { showMessage(results, error.message, "error"); }
+}
+$("#youtube-form").addEventListener("submit", (event) => {
+  event.preventDefault(); const query = new URLSearchParams({ q: $("#youtube-query").value, limit: $("#youtube-limit").value });
+  showYoutubeResponse(fetch(`/api/youtube/search?${query}`), "Searching YouTube…");
+});
+$("#youtube-links-form").addEventListener("submit", (event) => {
+  event.preventDefault(); const videos = $("#youtube-links").value.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
+  showYoutubeResponse(fetch("/api/youtube/videos", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ videos }) }), "Collecting video details…");
+});
+$("#youtube-channel-form").addEventListener("submit", (event) => {
+  event.preventDefault(); const query = new URLSearchParams({ channel: $("#youtube-channel").value.trim(), limit: $("#youtube-channel-limit").value });
+  showYoutubeResponse(fetch(`/api/youtube/channel?${query}`), "Collecting public channel uploads…");
 });
 $("#connect-google").addEventListener("click", () => { window.location.href = "/auth/google"; });
 $("#disconnect-google").addEventListener("click", async () => {

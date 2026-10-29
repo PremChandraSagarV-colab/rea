@@ -13,6 +13,8 @@ node server.mjs
 
 Edit `.env` with your values. Open `http://localhost:3000`. The dashboard can run without configuring Gmail or YouTube; those connectors become available when their credentials are set. To use REA analysis commands, return to the repository root, install its dependencies, and run `npm run build:cached`. REA's native and browser analysis runs on the same machine as its CLI; the web dashboard does not grant a hosted Render service access to your local files or desktop.
 
+Run `npm test` in `workbench/` for a mock-provider integration check of Gmail search/body/attachment routes and YouTube search/video/channel collection.
+
 ## Web scraper
 
 Enter one to ten public HTML or plain-text page URLs, optionally with a CSS selector. It extracts the page title, description, canonical URL, headings, up to 100 links, and up to 30,000 characters of readable text. Requests follow the site's `robots.txt` rules and are limited to standard web ports, five redirects, 15 seconds, and 5 MB per page. Local/private/reserved IP targets and non-HTML resources are blocked. The scraper does not execute page JavaScript, load browser sessions, or bypass access controls; single-page apps may need the local Chrome/REA workflows instead.
@@ -23,7 +25,7 @@ Create a Google OAuth client of type **Web application**, enable the Gmail API, 
 
 ## YouTube collector
 
-Enable **YouTube Data API v3** for a Google Cloud project, create an API key restricted to that API, and set `YOUTUBE_API_KEY` in `workbench/.env` or the Render service environment. Search uses the official YouTube Data API, then retrieves public video details and statistics. Search API quota is limited by Google's project quota. Caption availability is shown when listed; downloading captions for other channels' videos is not offered because YouTube requires OAuth authorization for caption tracks and the API does not expose those captions to arbitrary public searches. This module does not download video files.
+Enable **YouTube Data API v3** for a Google Cloud project, create an API key restricted to that API, and set `YOUTUBE_API_KEY` in `workbench/.env` or the Render service environment. Search uses the official YouTube Data API, then retrieves public video details and statistics. You can also collect details from up to 50 pasted video IDs/URLs or the latest 250 public uploads from a channel ID or @handle. Search API quota is limited by Google's project quota. Caption availability is shown when listed; downloading captions for other channels' videos is not offered because YouTube requires OAuth authorization for caption tracks and the API does not expose those captions to arbitrary public searches. This module does not download video files.
 
 Google OAuth consent-screen verification and user eligibility are controlled by Google's current project settings. Keep the app in test mode with only intended test users until your OAuth configuration is ready for broader use.
 
