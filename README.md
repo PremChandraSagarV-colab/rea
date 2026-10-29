@@ -7,6 +7,10 @@
 
 ### One MCP for reverse engineering across binaries, applications, and runtime behavior.
 
+## Personal fork extension
+
+This fork adds an [REA Workbench](workbench/README.md) dashboard with local browser and app-analysis command helpers and optional Gmail search through Google's read-only API. Its Render Blueprint uses the free web-service plan; configure the OAuth client and service secrets before enabling Gmail or deploying it.
+
 **See a feature you like. Understand how it works, down to the binary level.**
 
 [![npm version](https://img.shields.io/npm/v/rea-agents?style=flat-square&color=cb3837)](https://www.npmjs.com/package/rea-agents)
