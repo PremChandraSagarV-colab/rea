@@ -6,13 +6,13 @@ import {
   isNativeInventoryOperation,
   nativeInventoryRowsSchemas,
 } from "../native/nativeInventory.js";
-import { err, ok, type Result } from "../result.js";
-import type { AnalysisError } from "../analysisErrorBase.js";
-import type {
-  AnalysisViewParent,
-  AnalysisViewRequest,
-  UnsignedAnalysisView,
-} from "./analysisView.js";
+import { err, ok } from "../result.js";
+import type { AnalysisViewParent } from "./analysisViewParent.js";
+import {
+  assertOwnedView,
+  type AdmittedView,
+  type SummaryAnalysisView,
+} from "./analysisViewShape.js";
 import { analysisViewInputError } from "./analysisViewErrors.js";
 import { createAnalysisViewResultReader } from "./analysisViewParent.js";
 import {
@@ -68,8 +68,8 @@ const readStrings = createAnalysisViewResultReader(
 /** Project already completed provider observations without another provider read or sort. */
 export const projectNativeInventoryView = (
   parent: AnalysisViewParent,
-  view: AnalysisViewRequest,
-): Result<UnsignedAnalysisView, AnalysisError> => {
+  view: AdmittedView,
+) => {
   if (
     !isNativeInventoryOperation(parent.operation) ||
     (view.kind !== "summary" && view.kind !== "native-inventory")
@@ -84,6 +84,9 @@ export const projectNativeInventoryView = (
         },
       ]),
     );
+  assertOwnedView<
+    SummaryAnalysisView | z.output<typeof nativeInventoryViewRequestSchema>
+  >(view, "summary", "native-inventory");
   const strings =
     parent.operation === "list_strings" ||
     parent.operation === "search_strings";

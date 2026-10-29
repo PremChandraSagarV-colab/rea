@@ -1,12 +1,12 @@
 import { z } from "zod";
 import { erlangBeamSchema, type ErlangBeam } from "../erlang/beam.js";
-import type { AnalysisError } from "../analysisErrorBase.js";
-import { err, ok, type Result } from "../result.js";
-import type {
-  AnalysisViewParent,
-  AnalysisViewRequest,
-  UnsignedAnalysisView,
-} from "./analysisView.js";
+import { err, ok } from "../result.js";
+import type { AnalysisViewParent } from "./analysisViewParent.js";
+import {
+  ownedView,
+  type AdmittedView,
+  type SummaryAnalysisView,
+} from "./analysisViewShape.js";
 import { analysisViewInputError } from "./analysisViewErrors.js";
 import { createAnalysisViewResultReader } from "./analysisViewParent.js";
 import {
@@ -165,9 +165,12 @@ const selectRows = (rows: readonly Row[] | null, view: BeamView) => {
 /** Project retained BEAM facts without reopening files or reinterpreting chunks. */
 export const projectErlangBeamView = (
   parent: AnalysisViewParent,
-  view: AnalysisViewRequest,
-): Result<UnsignedAnalysisView, AnalysisError> => {
-  if (view.kind !== "summary" && view.kind !== "beam")
+  admitted: AdmittedView,
+) => {
+  const view = ownedView<
+    SummaryAnalysisView | z.output<typeof erlangBeamViewRequestSchema>
+  >(admitted, "summary", "beam");
+  if (view === undefined)
     return err(
       analysisViewInputError([
         {

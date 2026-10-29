@@ -1,19 +1,19 @@
 import { binaryMetadataArchitecture } from "../binaryMetadataArchitecture.js";
 import { metadataReportSubjectFormat } from "../apple/machoTargetSelection.js";
 import { z } from "zod";
-import type { AnalysisError } from "../analysisErrorBase.js";
 import {
   goBinarySchema,
   goBuildInfoSchema,
   goModuleMetadataSchema,
   goModuleSchema,
 } from "../go/goBinary.js";
-import { err, ok, type Result } from "../result.js";
-import type {
-  AnalysisViewParent,
-  AnalysisViewRequest,
-  UnsignedAnalysisView,
-} from "./analysisView.js";
+import { err, ok } from "../result.js";
+import type { AnalysisViewParent } from "./analysisViewParent.js";
+import {
+  ownedView,
+  type AdmittedView,
+  type SummaryAnalysisView,
+} from "./analysisViewShape.js";
 import {
   boundedViewMessages,
   completeWithinViewCoverage,
@@ -107,9 +107,12 @@ const parseReport = createAnalysisViewResultReader(goBinarySchema);
 /** Query the existing metadata owner's facts; never reopen or reinterpret a file. */
 export const projectGoBinaryView = (
   parent: AnalysisViewParent,
-  view: AnalysisViewRequest,
-): Result<UnsignedAnalysisView, AnalysisError> => {
-  if (view.kind !== "summary" && view.kind !== "go")
+  admitted: AdmittedView,
+) => {
+  const view = ownedView<
+    SummaryAnalysisView | z.output<typeof goBinaryViewRequestSchema>
+  >(admitted, "summary", "go");
+  if (view === undefined)
     return err(
       analysisViewInputError([
         {

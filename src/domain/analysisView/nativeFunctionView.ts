@@ -4,12 +4,14 @@ import type { AnalysisError } from "../analysisErrorBase.js";
 import { uniqueSorted } from "../canonicalOrdering.js";
 import type { FunctionDossier } from "../native/functionDossier.js";
 import { jsonValueSchema } from "../jsonValue.js";
-import { err, ok, type Result } from "../result.js";
-import type {
-  AnalysisViewParent,
-  AnalysisViewRequest,
-  UnsignedAnalysisView,
-} from "./analysisView.js";
+import { err, ok } from "../result.js";
+import type { AnalysisViewParent } from "./analysisViewParent.js";
+import {
+  assertOwnedView,
+  type AdmittedView,
+  type NativeFacetAnalysisView,
+  type SummaryAnalysisView,
+} from "./analysisViewShape.js";
 import {
   completeWithinViewCoverage,
   pageViewCoverage,
@@ -62,7 +64,7 @@ const parentFields = (
 const nativeRows = (
   dossier: FunctionDossier,
   facet: Exclude<
-    Extract<AnalysisViewRequest, { readonly kind: "native" }>["facet"],
+    NativeFacetAnalysisView["facet"],
     "procedure" | "pseudocode" | "native_api" | "value_flow_summary"
   >,
 ): readonly unknown[] | undefined => {
@@ -196,10 +198,10 @@ const summarizeDossier = (dossier: FunctionDossier) => {
 };
 
 const summaryView = (
-  view: Extract<AnalysisViewRequest, { readonly kind: "summary" }>,
+  view: SummaryAnalysisView,
   dossier: FunctionDossier,
   common: ReturnType<typeof parentFields>,
-): UnsignedAnalysisView => ({
+) => ({
   kind: "summary",
   view,
   summary: summarizeDossier(dossier),
@@ -216,12 +218,17 @@ const summaryView = (
 export const projectNativeFunctionView = (
   parent: AnalysisViewParent,
   dossier: FunctionDossier,
-  view: AnalysisViewRequest,
-): Result<UnsignedAnalysisView, AnalysisError> => {
+  view: AdmittedView,
+) => {
   if (view.kind !== "native" && view.kind !== "summary")
     return err(
       viewError("analyze_function Evidence requires a native or summary view."),
     );
+  assertOwnedView<SummaryAnalysisView | NativeFacetAnalysisView>(
+    view,
+    "summary",
+    "native",
+  );
   const artifact = parent.artifact;
   if (!artifact)
     return err(
@@ -239,7 +246,7 @@ export const projectNativeFunctionView = (
   const availability = facetAvailability(dossier, view.facet);
   if (availability?.available === false)
     common.unknowns = uniqueSorted([...common.unknowns, availability.reason]);
-  const singleton = (item: unknown): UnsignedAnalysisView => ({
+  const singleton = (item: unknown) => ({
     kind: "native",
     view,
     item: jsonValueSchema.parse(item),

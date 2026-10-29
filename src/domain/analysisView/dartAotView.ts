@@ -1,14 +1,14 @@
 import { analysisViewInputError } from "./analysisViewErrors.js";
 import { z } from "zod";
-import type { AnalysisError } from "../analysisErrorBase.js";
 import { flutterResultSchemas } from "../flutter/flutterBuildAnalysis.js";
-import { err, ok, type Result } from "../result.js";
+import { err, ok } from "../result.js";
 import { parseAnalysisViewResult } from "./analysisViewParent.js";
-import type {
-  AnalysisViewParent,
-  AnalysisViewRequest,
-  UnsignedAnalysisView,
-} from "./analysisView.js";
+import type { AnalysisViewParent } from "./analysisViewParent.js";
+import {
+  ownedView,
+  type AdmittedView,
+  type SummaryAnalysisView,
+} from "./analysisViewShape.js";
 import {
   completeWithinViewCoverage,
   pageViewCoverage,
@@ -47,9 +47,12 @@ export const dartAotViewContextSchema = z.strictObject({
 /** Reuse authenticated AOT Evidence without opening the APK or rescanning its ELF. */
 export const projectDartAotView = (
   parent: AnalysisViewParent,
-  view: AnalysisViewRequest,
-): Result<UnsignedAnalysisView, AnalysisError> => {
-  if (view.kind !== "summary" && view.kind !== "dart-aot")
+  admitted: AdmittedView,
+) => {
+  const view = ownedView<
+    SummaryAnalysisView | z.output<typeof dartAotViewRequestSchema>
+  >(admitted, "summary", "dart-aot");
+  if (view === undefined)
     return err(
       analysisViewInputError([
         {

@@ -1,15 +1,15 @@
 import { analysisViewInputError } from "./analysisViewErrors.js";
 import { z } from "zod";
-import type { AnalysisError } from "../analysisErrorBase.js";
 import { uniqueSorted } from "../canonicalOrdering.js";
 import { evmInterfaceSchema } from "../evm/evmInterface.js";
-import { err, ok, type Result } from "../result.js";
+import { err, ok } from "../result.js";
 import { parseAnalysisViewResult } from "./analysisViewParent.js";
-import type {
-  AnalysisViewParent,
-  AnalysisViewRequest,
-  UnsignedAnalysisView,
-} from "./analysisView.js";
+import type { AnalysisViewParent } from "./analysisViewParent.js";
+import {
+  ownedView,
+  type AdmittedView,
+  type SummaryAnalysisView,
+} from "./analysisViewShape.js";
 import {
   completeWithinViewCoverage,
   pageViewCoverage,
@@ -51,9 +51,12 @@ export const evmSummarySchema = z.strictObject({
 /** Select already authenticated producer facts; no interpreter or provider is invoked. */
 export const projectEvmInterfaceView = (
   parent: AnalysisViewParent,
-  view: AnalysisViewRequest,
-): Result<UnsignedAnalysisView, AnalysisError> => {
-  if (view.kind !== "summary" && view.kind !== "evm")
+  admitted: AdmittedView,
+) => {
+  const view = ownedView<
+    SummaryAnalysisView | z.output<typeof evmViewRequestSchema>
+  >(admitted, "summary", "evm");
+  if (view === undefined)
     return err(
       analysisViewInputError([
         {

@@ -1,4 +1,5 @@
 import type { AnalysisError } from "../analysisErrorBase.js";
+import { z } from "zod";
 import { evidenceSubjectIdentity } from "../evidence.js";
 import { digestCanonicalValue } from "../canonicalDigest.js";
 import { jsonValueSchema } from "../jsonValue.js";
@@ -9,11 +10,12 @@ import {
   nativeObservationSourceSchemas,
   type NativeObservation,
 } from "../native/nativeObservation.js";
-import type {
-  AnalysisViewParent,
-  AnalysisViewRequest,
-  UnsignedAnalysisView,
-} from "./analysisView.js";
+import type { AnalysisViewParent } from "./analysisViewParent.js";
+import {
+  assertOwnedView,
+  type AdmittedView,
+  type SummaryAnalysisView,
+} from "./analysisViewShape.js";
 import { createAnalysisViewResultReader } from "./analysisViewParent.js";
 import { analysisViewInputError } from "./analysisViewErrors.js";
 import {
@@ -21,6 +23,8 @@ import {
   completeWithinViewCoverage,
 } from "./analysisViewCoverage.js";
 import {
+  nativeContextViewRequestSchema,
+  nativeObservationViewRequestSchema,
   nativeSourceContextSchema,
   type NativeSourceContext,
 } from "./nativeObservationSchemas.js";
@@ -166,7 +170,7 @@ const observationRows = (
 };
 const contextRows = (
   source: NativeSourceContext,
-  view: Extract<AnalysisViewRequest, { kind: "native-context" }>,
+  view: z.output<typeof nativeContextViewRequestSchema>,
 ) => {
   switch (view.facet) {
     case "overview": {
@@ -245,8 +249,8 @@ const contextRows = (
 /** Select recorded native facts without repeating provider profiles or complete caveat inventories. */
 export const projectNativeObservationView = (
   parent: AnalysisViewParent,
-  view: AnalysisViewRequest,
-): Result<UnsignedAnalysisView, AnalysisError> => {
+  view: AdmittedView,
+) => {
   if (
     view.kind !== "summary" &&
     view.kind !== "native-observation" &&
@@ -262,6 +266,11 @@ export const projectNativeObservationView = (
         },
       ]),
     );
+  assertOwnedView<
+    | SummaryAnalysisView
+    | z.output<typeof nativeObservationViewRequestSchema>
+    | z.output<typeof nativeContextViewRequestSchema>
+  >(view, "summary", "native-observation", "native-context");
   const source = readSource(parent);
   if (!source.ok) return source;
   const context = readContext(parent, source.value);

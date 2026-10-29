@@ -1,5 +1,4 @@
 import { z } from "zod";
-import type { AnalysisError } from "../analysisErrorBase.js";
 import {
   commandObservationSchema,
   gdbCommandResultSchema,
@@ -8,12 +7,13 @@ import { digestSchema } from "../digests.js";
 import { providerSchema } from "../evidence.js";
 import { analysisInputErrorFromIssues } from "../inputIssueProjection.js";
 import { jsonValueSchema } from "../jsonValue.js";
-import { err, ok, type Result } from "../result.js";
-import type {
-  AnalysisViewParent,
-  AnalysisViewRequest,
-  UnsignedAnalysisView,
-} from "./analysisView.js";
+import { err, ok } from "../result.js";
+import type { AnalysisViewParent } from "./analysisViewParent.js";
+import {
+  ownedView,
+  type AdmittedView,
+  type SummaryAnalysisView,
+} from "./analysisViewShape.js";
 import {
   boundedViewMessages,
   completeWithinViewCoverage,
@@ -42,9 +42,10 @@ export const gdbCommandSummarySchema = gdbCommandResultSchema
 /** Select existing owner facts without parsing a command or its output protocol. */
 export const projectCommandObservationView = (
   parent: AnalysisViewParent,
-  view: AnalysisViewRequest,
-): Result<UnsignedAnalysisView, AnalysisError> => {
-  if (view.kind !== "summary")
+  admitted: AdmittedView,
+) => {
+  const view = ownedView<SummaryAnalysisView>(admitted, "summary");
+  if (view === undefined)
     return err(
       analysisViewInputError([
         {

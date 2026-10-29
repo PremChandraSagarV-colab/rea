@@ -11,11 +11,13 @@ import { jsonValueByteLength } from "../jsonValueByteLength.js";
 import type { JsonValue } from "../jsonValue.js";
 import { err, ok, type Result } from "../result.js";
 import { createAnalysisViewResultReader } from "./analysisViewParent.js";
-import type {
-  AnalysisViewParent,
-  AnalysisViewRequest,
-  UnsignedAnalysisView,
-} from "./analysisView.js";
+import type { AnalysisViewParent } from "./analysisViewParent.js";
+import { androidViewRequestSchema } from "../android/androidPackageQuery.js";
+import {
+  assertOwnedView,
+  type AdmittedView,
+  type SummaryAnalysisView,
+} from "./analysisViewShape.js";
 import {
   boundedViewMessages,
   completeWithinViewCoverage,
@@ -106,8 +108,8 @@ const choose = <T extends object>(
 /** Project authenticated retained facts without reopening the APK or engine. */
 export const projectAndroidPackageView = (
   parent: AnalysisViewParent,
-  view: AnalysisViewRequest,
-): Result<UnsignedAnalysisView, AnalysisError> => {
+  view: AdmittedView,
+) => {
   if (view.kind !== "summary" && view.kind !== "android")
     return err(
       analysisViewInputError([
@@ -119,6 +121,9 @@ export const projectAndroidPackageView = (
         },
       ]),
     );
+  assertOwnedView<
+    SummaryAnalysisView | z.output<typeof androidViewRequestSchema>
+  >(view, "summary", "android");
   if (parent.operation !== "inspect_android_package")
     return err(
       analysisViewInputError([
@@ -295,7 +300,7 @@ export const projectAndroidPackageView = (
       ]++;
       summary.declaration_coverage[row.declaration_coverage]++;
     }
-    const result: UnsignedAnalysisView = {
+    const result = {
       ...context,
       kind: "android",
       facet: "component-summary",
@@ -365,7 +370,7 @@ export const projectAndroidPackageView = (
     bytes += added;
     items.push(item);
   }
-  const result: UnsignedAnalysisView = {
+  const result = {
     ...context,
     kind: "android",
     facet: "components",

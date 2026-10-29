@@ -1,13 +1,13 @@
 import { z } from "zod";
-import type { AnalysisError } from "../analysisErrorBase.js";
 import { providerSchema } from "../evidence.js";
 import { fridaSessionStatusSchema } from "../fridaSessionStatus.js";
-import { err, ok, type Result } from "../result.js";
-import type {
-  AnalysisViewParent,
-  AnalysisViewRequest,
-  UnsignedAnalysisView,
-} from "./analysisView.js";
+import { err, ok } from "../result.js";
+import type { AnalysisViewParent } from "./analysisViewParent.js";
+import {
+  ownedView,
+  type AdmittedView,
+  type SummaryAnalysisView,
+} from "./analysisViewShape.js";
 import {
   boundedViewMessages,
   completeWithinViewCoverage,
@@ -27,9 +27,10 @@ export const fridaSessionStatusViewContext = {
 /** Summarize captured facts without interpreting caller-authored message payloads. */
 export const projectFridaSessionStatusView = (
   parent: AnalysisViewParent,
-  view: AnalysisViewRequest,
-): Result<UnsignedAnalysisView, AnalysisError> => {
-  if (view.kind !== "summary")
+  admitted: AdmittedView,
+) => {
+  const view = ownedView<SummaryAnalysisView>(admitted, "summary");
+  if (view === undefined)
     return err(
       analysisViewInputError([
         {

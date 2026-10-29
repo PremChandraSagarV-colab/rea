@@ -6,17 +6,20 @@ import {
   androidJniDeclarationSchema,
   androidJniLibrarySchema,
 } from "../android/androidJniBindings.js";
-import { androidJniViewItemsSchema } from "../android/androidJniQuery.js";
-import type { AnalysisError } from "../analysisErrorBase.js";
+import {
+  androidJniViewItemsSchema,
+  androidJniViewRequestSchema,
+} from "../android/androidJniQuery.js";
 import { AnalysisResourceConstraintError } from "../analysisErrorCore.js";
 import type { JsonValue } from "../jsonValue.js";
 import { jsonValueByteLength } from "../jsonValueByteLength.js";
-import { err, ok, type Result } from "../result.js";
-import type {
-  AnalysisViewParent,
-  AnalysisViewRequest,
-  UnsignedAnalysisView,
-} from "./analysisView.js";
+import { err, ok } from "../result.js";
+import type { AnalysisViewParent } from "./analysisViewParent.js";
+import {
+  assertOwnedView,
+  type AdmittedView,
+  type SummaryAnalysisView,
+} from "./analysisViewShape.js";
 import {
   ANALYSIS_VIEW_PAGE_BUDGET_RECOVERY,
   analysisViewInputError,
@@ -63,8 +66,8 @@ export const androidJniSummarySchema = reportSchema
 /** Source facts are already parsed; views never reopen the APK or rerun either reader. */
 export const projectAndroidJniView = (
   parent: AnalysisViewParent,
-  view: AnalysisViewRequest,
-): Result<UnsignedAnalysisView, AnalysisError> => {
+  view: AdmittedView,
+) => {
   if (
     parent.operation !== "inspect_android_jni_bindings" ||
     (view.kind !== "summary" && view.kind !== "android-jni")
@@ -79,6 +82,9 @@ export const projectAndroidJniView = (
         },
       ]),
     );
+  assertOwnedView<
+    SummaryAnalysisView | z.output<typeof androidJniViewRequestSchema>
+  >(view, "summary", "android-jni");
   const parsed = readReport(parent);
   if (!parsed.ok) return parsed;
   const report = parsed.value;
@@ -98,7 +104,7 @@ export const projectAndroidJniView = (
       "unknowns",
     ),
   };
-  let result: UnsignedAnalysisView;
+  let result: Record<string, unknown>;
   if (view.kind === "summary") {
     const bindings = report.bindings.slice(0, 64);
     const candidateIds = new Set(

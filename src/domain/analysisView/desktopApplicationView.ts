@@ -16,13 +16,13 @@ import {
   completeWithinViewCoverage,
   pageViewCoverage,
 } from "./analysisViewCoverage.js";
-import type {
-  AnalysisViewParent,
-  AnalysisViewRequest,
-  UnsignedAnalysisView,
-} from "./analysisView.js";
-import type { AnalysisError } from "../analysisErrorBase.js";
-import { ok, err, type Result } from "../result.js";
+import type { AnalysisViewParent } from "./analysisViewParent.js";
+import {
+  ownedView,
+  type AdmittedView,
+  type SummaryAnalysisView,
+} from "./analysisViewShape.js";
+import { ok, err } from "../result.js";
 
 // Bound diagnostic context independently of the retained report size. Previews
 // are display values; stable file IDs select the original paths and all issues.
@@ -146,9 +146,12 @@ type DesktopViewRow = DesktopApplication[DesktopCollection][number];
 const validatedParents = new WeakSet<object>();
 export const projectDesktopApplicationView = (
   parent: AnalysisViewParent,
-  view: AnalysisViewRequest,
-): Result<UnsignedAnalysisView, AnalysisError> => {
-  if (view.kind !== "summary" && view.kind !== "desktop-application")
+  admitted: AdmittedView,
+) => {
+  const view = ownedView<
+    SummaryAnalysisView | z.output<typeof desktopViewRequestSchema>
+  >(admitted, "summary", "desktop-application");
+  if (view === undefined)
     return err(
       analysisViewInputError([
         {

@@ -1,13 +1,13 @@
 import { z } from "zod";
 import { AnalysisInputError } from "../analysisErrorCore.js";
-import type { AnalysisError } from "../analysisErrorBase.js";
 import { byteEntropySchema, type ByteEntropy } from "../native/byteEntropy.js";
-import { err, ok, type Result } from "../result.js";
-import type {
-  AnalysisViewParent,
-  AnalysisViewRequest,
-  UnsignedAnalysisView,
-} from "./analysisView.js";
+import { err, ok } from "../result.js";
+import type { AnalysisViewParent } from "./analysisViewParent.js";
+import {
+  assertOwnedView,
+  type AdmittedView,
+  type SummaryAnalysisView,
+} from "./analysisViewShape.js";
 import { completeWithinViewCoverage } from "./analysisViewCoverage.js";
 
 export const byteEntropySummarySchema = byteEntropySchema
@@ -22,8 +22,8 @@ export const byteEntropySummarySchema = byteEntropySchema
 export const projectByteEntropyView = (
   parent: AnalysisViewParent,
   report: ByteEntropy,
-  view: Exclude<AnalysisViewRequest, { kind: "api-surface" }>,
-): Result<UnsignedAnalysisView, AnalysisError> => {
+  view: AdmittedView,
+) => {
   if (view.kind !== "summary")
     return err(
       new AnalysisInputError("inspect_analysis_view", undefined, [
@@ -35,6 +35,7 @@ export const projectByteEntropyView = (
         },
       ]),
     );
+  assertOwnedView<SummaryAnalysisView>(view, "summary");
   return ok({
     kind: "summary",
     view,

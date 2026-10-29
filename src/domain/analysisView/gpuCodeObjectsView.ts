@@ -12,11 +12,12 @@ import {
   type GpuCodeObjects,
 } from "../gpu/gpuCodeObjects.js";
 import type { AnalysisError } from "../analysisErrorBase.js";
-import type {
-  AnalysisViewParent,
-  AnalysisViewRequest,
-  UnsignedAnalysisView,
-} from "./analysisView.js";
+import type { AnalysisViewParent } from "./analysisViewParent.js";
+import {
+  ownedView,
+  type AdmittedView,
+  type SummaryAnalysisView,
+} from "./analysisViewShape.js";
 import {
   ANALYSIS_VIEW_PAGE_BUDGET_RECOVERY,
   analysisViewInputError,
@@ -222,9 +223,12 @@ const readGpuFacts = (
 };
 export const projectGpuCodeObjectsView = (
   parent: AnalysisViewParent,
-  view: AnalysisViewRequest,
-): Result<UnsignedAnalysisView, AnalysisError> => {
-  if (view.kind !== "summary" && view.kind !== "gpu-code-objects")
+  admitted: AdmittedView,
+) => {
+  const view = ownedView<
+    SummaryAnalysisView | z.output<typeof gpuCodeObjectsViewRequestSchema>
+  >(admitted, "summary", "gpu-code-objects");
+  if (view === undefined)
     return err(
       analysisViewInputError([
         {
