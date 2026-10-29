@@ -3426,7 +3426,8 @@ process.stdin.on('data', (chunk) => {
     });
     expect(exited.error.partialObservation).toMatchObject({
       limitations: expect.arrayContaining([
-        expect.stringContaining("16777216 byte or 16384 record cap"),
+        expect.stringContaining("REA_DEBUGGER_MAX_COMMAND_OUTPUT_BYTES"),
+        expect.stringContaining("16384"),
       ]),
     });
   }
