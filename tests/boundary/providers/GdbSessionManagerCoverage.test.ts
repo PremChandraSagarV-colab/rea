@@ -25,7 +25,10 @@ import type {
   ProviderProcessHandle,
   SpawnedOwnedProviderProcess,
 } from "../../../src/process/ProviderProcess.js";
-import { DEBUGGER_MAX_COMMAND_OUTPUT_BYTES_SETTING } from "../../../src/config/debuggerSessionLimits.js";
+import {
+  DEBUGGER_COMMAND_DEADLINE_SETTING,
+  DEBUGGER_MAX_COMMAND_OUTPUT_BYTES_SETTING,
+} from "../../../src/config/debuggerSessionLimits.js";
 import { DEFAULT_DEBUGGER_MAX_COMMAND_OUTPUT_BYTES } from "../../../src/domain/analysisResourceLimits.js";
 import { projectAnalysisError } from "../../../src/domain/analysisErrorProjection.js";
 import { stopOwnedDebuggerProcess } from "../../../src/process/ownedDebuggerSession.js";
@@ -1511,7 +1514,7 @@ it("rejects a truncated inferior TTY readback before publishing the session", as
     );
   });
   const manager = managerWithFakeSpawner(fake.spawnProcess, {
-    maxCommandOutputBytes: 80,
+    controlReplyBytes: 80,
   });
 
   const started = await manager.start(undefined, { inferiorTty: tty });
@@ -1521,6 +1524,25 @@ it("rejects a truncated inferior TTY readback before publishing the session", as
     error: { _tag: "AnalysisCapabilityUnavailableError" },
   });
   expect(fake.children[0]?.killSignals).toEqual(["SIGTERM"]);
+});
+
+it("keeps inferior TTY readback when the caller output cap is smaller than that reply", async () => {
+  const tty = `/dev/pts/${"x".repeat(200)}`;
+  const fake = createFakeSpawner((child, token, command) => {
+    child.stdout.write(
+      command.includes("inferior-tty-show")
+        ? `${token}^done,inferior_tty_terminal=${JSON.stringify(tty)}\n`
+        : `${token}^done\n`,
+    );
+  });
+  const manager = managerWithFakeSpawner(fake.spawnProcess, {
+    maxCommandOutputBytes: 80,
+  });
+
+  const started = await manager.start(undefined, { inferiorTty: tty });
+
+  expect(started.ok).toBe(true);
+  if (!started.ok) throw started.error;
 });
 
 it.each([
@@ -1879,6 +1901,17 @@ it("preserves a timeout while startup waits for the automatic-loading response",
     expect(started.error).toBeInstanceOf(AnalysisTimeoutError);
     if (started.error instanceof AnalysisTimeoutError)
       expect(started.error.operation).toBe("start_gdb_session");
+    expect(projectAnalysisError(started.error)).toMatchObject({
+      details: {
+        diagnostics: {
+          setting: DEBUGGER_COMMAND_DEADLINE_SETTING,
+          effective_value: 25,
+          source: "runtime",
+          unit: "ms",
+          restart_required: true,
+        },
+      },
+    });
   }
   expect(fake.children[0]?.killSignals).toEqual(["SIGTERM"]);
 });

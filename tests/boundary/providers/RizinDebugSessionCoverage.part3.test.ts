@@ -510,6 +510,43 @@ it.skipIf(process.platform === "win32").each([
 );
 
 it.skipIf(process.platform === "win32")(
+  "accepts cleanup readback larger than the caller command-output cap",
+  async () => {
+    const cleanupReadback = `${" ".repeat(32)}[]`;
+    const injected = createInjectedProcess({
+      onWrite: (text, control) => {
+        const marker = /!echo (.+)\n/u.exec(text)?.[1];
+        if (marker === undefined) return;
+        if (text.startsWith("ok\n")) control.output(`ok\0${marker}\0`);
+        else if (text.startsWith("olj\n"))
+          control.output(`${cleanupReadback}\0${marker}\0`);
+        else control.output(`${marker}\0`);
+      },
+    });
+    const { manager, started } = await startInjected(injected.spawnProcess, {
+      maxCommandOutputBytes: 8,
+      stopProcess: async (session) => {
+        try {
+          await session.detachInferior?.();
+          injected.control.exit();
+          return { status: "stopped" };
+        } catch (cause) {
+          return { status: "incomplete", reason: String(cause) };
+        }
+      },
+    });
+    if (!started.ok) throw started.error;
+    const executed = await manager.execute(started.value.session_id, "ok");
+    expect(executed.ok).toBe(true);
+    if (!executed.ok) throw executed.error;
+    expect(Buffer.byteLength(cleanupReadback, "utf8")).toBeGreaterThan(8);
+    const closed = await manager.close(started.value.session_id);
+    expect(closed.ok).toBe(true);
+    if (!closed.ok) throw closed.error;
+  },
+);
+
+it.skipIf(process.platform === "win32")(
   "retains a startup protocol diagnosis across successful cleanup synchronization",
   async () => {
     const injected = createInjectedProcess({

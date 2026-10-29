@@ -18,6 +18,7 @@ import {
 } from "../domain/analysisErrorBase.js";
 import { createEvidence, type Evidence } from "../domain/evidence.js";
 import type { GdbCommandResult } from "../domain/commandObservation.js";
+import { DEBUGGER_CONTROL_REPLY_BYTES } from "../domain/analysisResourceLimits.js";
 import { err, ok, type Result } from "../domain/result.js";
 import {
   ProviderProcessSupervisor,
@@ -52,6 +53,7 @@ const copiedTimeoutGuidance = (
 ): {
   readonly userMessage?: string;
   readonly remediationAction?: string;
+  readonly diagnostics?: AnalysisTimeoutError["diagnostics"];
 } => ({
   ...(cause.userMessage === undefined
     ? {}
@@ -59,6 +61,9 @@ const copiedTimeoutGuidance = (
   ...(cause.remediationAction === undefined
     ? {}
     : { remediationAction: cause.remediationAction }),
+  ...(cause.diagnostics === undefined
+    ? {}
+    : { diagnostics: cause.diagnostics }),
 });
 /** A host executable refusal cannot be repaired by changing MI dialect. */
 class GdbExecutableRefusal extends AnalysisCapabilityUnavailableError {
@@ -122,6 +127,8 @@ interface PendingCommand {
   readonly evidenceCommand: string;
   readonly lines: string[];
   outputBytes: number;
+  /** Caller output uses the setting. Startup and detach replies use the control budget. */
+  readonly outputBudgetBytes: number;
   outputTruncated: boolean;
   outputInvalidUtf8: boolean;
   terminalRecord: string | undefined;
@@ -502,6 +509,8 @@ interface GdbSession {
   readonly knownInferiorIdentities: Map<string, OwnedInferiorIdentity>;
   readonly inferiorTty: string | undefined;
   readonly maxCommandOutputBytes: number;
+  /** Startup and detach MI. Separate from the caller command-output cap. */
+  readonly controlReplyBytes: number;
   readonly stdoutSettled: Promise<void>;
   readonly settleStdout: () => void;
   inferiorTtyVerified: boolean;
@@ -573,6 +582,7 @@ export class GdbSessionManager {
   readonly #maxPendingCommands: DebuggerAdmissionLimit;
   readonly #commandOutput: DebuggerAdmissionLimit;
   readonly #maxCommandOutputBytes: number;
+  readonly #controlReplyBytes: number;
   #sessionReservations = 0;
   #closing = false;
   #closePromise: Promise<void> | undefined;
@@ -600,6 +610,11 @@ export class GdbSessionManager {
       readonly maxPendingCommands?: number;
       /** @internal Test seam. Production uses REA_DEBUGGER_MAX_COMMAND_OUTPUT_BYTES. */
       readonly maxCommandOutputBytes?: number;
+      /**
+       * @internal Test seam for startup and detach MI truncation.
+       * Production uses the fixed control-reply budget.
+       */
+      readonly controlReplyBytes?: number;
     } = {},
   ) {
     this.#environment = { ...(options.environment ?? process.env) };
@@ -630,6 +645,8 @@ export class GdbSessionManager {
       options.maxCommandOutputBytes,
     );
     this.#maxCommandOutputBytes = this.#commandOutput.value;
+    this.#controlReplyBytes =
+      options.controlReplyBytes ?? DEBUGGER_CONTROL_REPLY_BYTES;
   }
 
   async start(
@@ -853,6 +870,7 @@ export class GdbSessionManager {
       knownInferiorIdentities: new Map(),
       inferiorTty,
       maxCommandOutputBytes: this.#maxCommandOutputBytes,
+      controlReplyBytes: this.#controlReplyBytes,
       stdoutSettled,
       settleStdout,
       inferiorTtyVerified: false,
@@ -1702,7 +1720,7 @@ export class GdbSessionManager {
       for (const pending of session.pending.values()) {
         const lineBytes = Buffer.byteLength(line, "utf8") + 1;
         if (
-          pending.outputBytes + lineBytes <= session.maxCommandOutputBytes &&
+          pending.outputBytes + lineBytes <= pending.outputBudgetBytes &&
           pending.lines.length < MAX_COMMAND_OUTPUT_RECORDS
         ) {
           pending.lines.push(line);
@@ -2167,6 +2185,9 @@ export class GdbSessionManager {
         cleanup,
         timer,
         outputBytes: 0,
+        outputBudgetBytes: command.startsWith("-interpreter-exec console ")
+          ? session.maxCommandOutputBytes
+          : session.controlReplyBytes,
         outputTruncated: false,
         outputInvalidUtf8: false,
         terminalRecord: undefined,

@@ -25,6 +25,7 @@ import {
 } from "../process/ProviderProcess.js";
 import {
   applyDebuggerAdmissionOverride,
+  debuggerControlReplyOutput,
   resolveDebuggerSessionLimits,
   type DebuggerAdmissionLimit,
 } from "../config/debuggerSessionLimits.js";
@@ -1427,7 +1428,7 @@ export class RizinDebugSessionManager {
       session,
       marker,
       CLEANUP_COMMAND_TIMEOUT_MS,
-      this.#commandOutput,
+      debuggerControlReplyOutput,
     );
     if (!captured.ok) throw captured.error.cause;
     if (captured.value.outputTruncated)
@@ -1807,7 +1808,10 @@ const waitForCommandFrames = async (
     const markerSeen = append(received);
     if (outputTruncated) {
       if (outputLimit === "command_output_bytes")
-        session.protocolError ??= `Rizin command output exceeded the ${String(maxCommandOutputBytes)} byte command limit. ${debuggerAdmissionRecovery(commandOutput)}`;
+        session.protocolError ??=
+          commandOutput === debuggerControlReplyOutput
+            ? `Rizin control readback exceeded the ${String(maxCommandOutputBytes)} byte control-reply budget. That budget is separate from REA_DEBUGGER_MAX_COMMAND_OUTPUT_BYTES and has no runtime override.`
+            : `Rizin command output exceeded the ${String(maxCommandOutputBytes)} byte command limit. ${debuggerAdmissionRecovery(commandOutput)}`;
       else if (outputLimit === "frame_bytes")
         session.protocolError ??= `Rizin emitted a NUL frame exceeding the ${String(MAX_FRAME_BYTES)} byte (16 MiB) protocol limit. This release has no runtime override.`;
       return ok(snapshot());

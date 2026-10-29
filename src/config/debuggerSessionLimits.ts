@@ -227,6 +227,22 @@ export const resolveDebuggerSessionLimits = (
   return parsed.value;
 };
 
+/**
+ * Fixed budget for Rizin cleanup readback and GDB startup or detach MI.
+ * This is not `REA_DEBUGGER_MAX_COMMAND_OUTPUT_BYTES`. A caller cap below
+ * this budget must not truncate those required replies, and recovery for
+ * this budget is not an environment setting.
+ */
+export const debuggerControlReplyOutput: DebuggerAdmissionLimit = {
+  setting: "debugger control-reply budget",
+  value: DEFAULT_DEBUGGER_MAX_COMMAND_OUTPUT_BYTES,
+  source: "default",
+  defaultValue: DEFAULT_DEBUGGER_MAX_COMMAND_OUTPUT_BYTES,
+  minimum: DEFAULT_DEBUGGER_MAX_COMMAND_OUTPUT_BYTES,
+  maximum: DEFAULT_DEBUGGER_MAX_COMMAND_OUTPUT_BYTES,
+  unit: "bytes",
+};
+
 /** Test and caller seams replace the launch value and record that source. */
 export const applyDebuggerAdmissionOverride = (
   admission: DebuggerAdmissionLimit,

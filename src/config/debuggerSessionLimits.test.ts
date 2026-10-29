@@ -3,6 +3,7 @@ import { expect, it } from "vitest";
 import { ConfigurationError } from "../domain/configurationErrors.js";
 import { projectAnalysisError } from "../domain/analysisErrorProjection.js";
 import {
+  DEFAULT_DEBUGGER_MAX_COMMAND_OUTPUT_BYTES,
   MAXIMUM_DEBUGGER_COMMAND_DEADLINE_MS,
   MAXIMUM_DEBUGGER_MAX_COMMAND_OUTPUT_BYTES,
   MAXIMUM_DEBUGGER_MAX_PENDING_COMMANDS,
@@ -30,8 +31,7 @@ import {
 
 it("uses the shared defaults when the settings are unset", () => {
   const parsed = parseDebuggerSessionLimits({});
-  expect(parsed.ok).toBe(true);
-  if (!parsed.ok) return;
+  if (!parsed.ok) throw parsed.error;
   expect(parsed.value.commandDeadline).toMatchObject({
     setting: DEBUGGER_COMMAND_DEADLINE_SETTING,
     value: 120_000,
@@ -73,8 +73,7 @@ it("accepts one in-range override for each shared debugger cap", () => {
     [DEBUGGER_MAX_PENDING_COMMANDS_SETTING]: "3",
     [DEBUGGER_MAX_COMMAND_OUTPUT_BYTES_SETTING]: "4096",
   });
-  expect(parsed.ok).toBe(true);
-  if (!parsed.ok) return;
+  if (!parsed.ok) throw parsed.error;
   expect(parsed.value.commandDeadline).toMatchObject({
     value: 1000,
     source: "setting",
@@ -159,55 +158,73 @@ it("names the session setting on a Rizin capacity refusal", async () => {
   await first;
 });
 
+it("keeps the command-output maximum inside one Evidence hash string", () => {
+  const escaped = JSON.stringify("\u0001");
+  const expansion = escaped.length - 2;
+  const nodeMaxStringLength = 536_870_888;
+  const envelope = 1024 * 1024;
+  expect(expansion).toBe(6);
+  expect(MAXIMUM_DEBUGGER_MAX_COMMAND_OUTPUT_BYTES).toBe(
+    Math.floor((nodeMaxStringLength - envelope) / expansion),
+  );
+  expect(MAXIMUM_DEBUGGER_MAX_COMMAND_OUTPUT_BYTES).toBeGreaterThanOrEqual(
+    DEFAULT_DEBUGGER_MAX_COMMAND_OUTPUT_BYTES,
+  );
+  expect(
+    MAXIMUM_DEBUGGER_MAX_COMMAND_OUTPUT_BYTES * expansion + envelope,
+  ).toBeLessThanOrEqual(nodeMaxStringLength);
+});
+
 it("does not let one Rizin manager consume another manager's session cap", async () => {
-  const tight = new RizinDebugSessionManager(
+  const first = new RizinDebugSessionManager(
     { [DEBUGGER_MAX_SESSIONS_SETTING]: "1" },
     { platform: "linux" },
   );
-  const independent = new RizinDebugSessionManager(
-    {},
-    { platform: "linux", maxSessions: 0 },
+  const second = new RizinDebugSessionManager(
+    { [DEBUGGER_MAX_SESSIONS_SETTING]: "1" },
+    { platform: "linux" },
   );
-  const reserved = tight.start({
+  const input = {
     path: "/tmp/rea-debugger-limit",
     inferior_tty: "/no/such/rea-debugger-tty",
-  });
-  const blocked = await independent.start({
-    path: "/tmp/rea-debugger-limit",
-    inferior_tty: "/no/such/rea-debugger-tty",
-  });
-  expect(blocked.ok).toBe(false);
-  if (blocked.ok) throw new Error("expected the independent cap to refuse");
-  expect(projectAnalysisError(blocked.error)).toMatchObject({
-    code: "resource_constraint",
-    details: {
-      reported_limits: {
-        setting: DEBUGGER_MAX_SESSIONS_SETTING,
-        effective_value: 0,
-        source: "runtime",
-        minimum: MINIMUM_DEBUGGER_MAX_SESSIONS,
-        maximum: MAXIMUM_DEBUGGER_MAX_SESSIONS,
-      },
-    },
-  });
-  const stillOpen = await tight.start({
+  };
+  const held = first.start(input);
+  const independent = second.start(input);
+  const blocked = first.start({
+    ...input,
     path: "/tmp/rea-debugger-limit-2",
-    inferior_tty: "/no/such/rea-debugger-tty",
   });
-  expect(stillOpen.ok).toBe(false);
-  if (stillOpen.ok)
-    throw new Error("expected the first manager to stay capped");
-  expect(projectAnalysisError(stillOpen.error)).toMatchObject({
-    code: "resource_constraint",
-    details: {
-      reported_limits: {
-        effective_value: 1,
-        source: "setting",
-        active_or_reserved_sessions: 1,
+  try {
+    const independentResult = await independent;
+    expect(independentResult.ok).toBe(false);
+    if (independentResult.ok)
+      throw new Error("expected the missing terminal to fail");
+    expect(projectAnalysisError(independentResult.error)).toMatchObject({
+      code: "invalid_request",
+      details: {
+        issues: [{ path: ["inferior_tty"], reason: "invalid_value" }],
       },
-    },
-  });
-  await reserved;
+    });
+    const blockedResult = await blocked;
+    expect(blockedResult.ok).toBe(false);
+    if (blockedResult.ok)
+      throw new Error("expected the first manager to stay capped");
+    expect(projectAnalysisError(blockedResult.error)).toMatchObject({
+      code: "resource_constraint",
+      details: {
+        reported_limits: {
+          setting: DEBUGGER_MAX_SESSIONS_SETTING,
+          effective_value: 1,
+          source: "setting",
+          active_or_reserved_sessions: 1,
+        },
+      },
+    });
+  } finally {
+    await held;
+    await independent;
+    await blocked;
+  }
 });
 
 it("refuses an invalid GDB deadline before a session starts", () => {

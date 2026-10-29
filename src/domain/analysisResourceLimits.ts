@@ -155,9 +155,34 @@ export const MAXIMUM_DEBUGGER_MAX_PENDING_COMMANDS = 256;
 export const DEFAULT_DEBUGGER_MAX_COMMAND_OUTPUT_BYTES = 16 * 1024 * 1024;
 
 /**
- * Largest configurable command-output retention. The bytes are decoded into
- * one string; 256 MiB keeps that text below Node's single-string ceiling. A
- * lower value only retains less output, so the floor is one byte.
+ * Node's single-string ceiling, in UTF-16 code units. This is the same V8
+ * bound `MAXIMUM_BRIDGE_MAX_REQUEST_BYTES` leaves room under.
+ */
+const NODE_MAX_STRING_LENGTH = 536_870_888;
+
+/**
+ * `JSON.stringify` encodes U+0000–U+001F as `\uXXXX` (6 code units). Evidence
+ * hashing stringifies the retained command output as one string. One mebibyte
+ * is reserved for the surrounding evidence document.
+ */
+const DEBUGGER_OUTPUT_JSON_ESCAPE_CODE_UNITS = 6;
+const DEBUGGER_OUTPUT_EVIDENCE_ENVELOPE_CODE_UNITS = 1024 * 1024;
+
+/**
+ * Largest configurable command-output retention. A lower value only retains
+ * less caller command output, so the floor is one byte. The maximum keeps
+ * the worst-case JSON expansion of that text under Node's string ceiling.
  */
 export const MINIMUM_DEBUGGER_MAX_COMMAND_OUTPUT_BYTES = 1;
-export const MAXIMUM_DEBUGGER_MAX_COMMAND_OUTPUT_BYTES = 256 * 1024 * 1024;
+export const MAXIMUM_DEBUGGER_MAX_COMMAND_OUTPUT_BYTES = Math.floor(
+  (NODE_MAX_STRING_LENGTH - DEBUGGER_OUTPUT_EVIDENCE_ENVELOPE_CODE_UNITS) /
+    DEBUGGER_OUTPUT_JSON_ESCAPE_CODE_UNITS,
+);
+
+/**
+ * Bytes reserved for debugger control replies (Rizin cleanup readback and
+ * GDB startup or detach MI). This is not `REA_DEBUGGER_MAX_COMMAND_OUTPUT_BYTES`:
+ * a caller cap below this budget must not truncate those required replies.
+ */
+export const DEBUGGER_CONTROL_REPLY_BYTES =
+  DEFAULT_DEBUGGER_MAX_COMMAND_OUTPUT_BYTES;
