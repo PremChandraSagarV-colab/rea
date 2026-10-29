@@ -25,6 +25,8 @@ import type {
   ProviderProcessHandle,
   SpawnedOwnedProviderProcess,
 } from "../../../src/process/ProviderProcess.js";
+import { DEBUGGER_MAX_COMMAND_OUTPUT_BYTES_SETTING } from "../../../src/config/debuggerSessionLimits.js";
+import { DEFAULT_DEBUGGER_MAX_COMMAND_OUTPUT_BYTES } from "../../../src/domain/analysisResourceLimits.js";
 import { projectAnalysisError } from "../../../src/domain/analysisErrorProjection.js";
 import { stopOwnedDebuggerProcess } from "../../../src/process/ownedDebuggerSession.js";
 import { parseLinuxProcessStat } from "../../../src/process/LinuxProcessStat.js";
@@ -3424,11 +3426,15 @@ process.stdin.on('data', (chunk) => {
         completion_status: "unknown",
       },
     });
-    expect(exited.error.partialObservation).toMatchObject({
-      limitations: expect.arrayContaining([
-        expect.stringContaining("REA_DEBUGGER_MAX_COMMAND_OUTPUT_BYTES"),
-        expect.stringContaining("16384"),
-      ]),
+    expect(projectAnalysisError(exited.error)).toMatchObject({
+      code: "cleanup_incomplete",
+      details: {
+        diagnostics: {
+          setting: DEBUGGER_MAX_COMMAND_OUTPUT_BYTES_SETTING,
+          effective_value: DEFAULT_DEBUGGER_MAX_COMMAND_OUTPUT_BYTES,
+          source: "default",
+        },
+      },
     });
   }
 });

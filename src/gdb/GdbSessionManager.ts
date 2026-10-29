@@ -33,6 +33,7 @@ import {
 import {
   closeOwnedDebuggerSessions,
   configurableDeadlineGuidance,
+  debuggerAdmissionDiagnostics,
   debuggerAdmissionRecovery,
   debuggerResourceConstraintError,
   fixedDeadlineGuidance,
@@ -1345,7 +1346,17 @@ export class GdbSessionManager {
                     session,
                     "gdb_console",
                     stopped.reason,
-                    { cause, partialObservation: evidence },
+                    {
+                      cause,
+                      partialObservation: evidence,
+                      ...(result.output_truncated
+                        ? {
+                            diagnostics: debuggerAdmissionDiagnostics(
+                              this.#commandOutput,
+                            ),
+                          }
+                        : {}),
+                    },
                   ),
                 );
               return ok({ result, evidence });
