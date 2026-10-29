@@ -215,6 +215,43 @@ async function crawlSite(seed, maxPages, maxDepth, selector = "") {
   return { seedUrl: seed, origin, maxPages, maxDepth, count: results.length, results };
 }
 
+async function collectSitemap(input, maxUrls, selector = "") {
+  const initial = await checkRobots(input);
+  const origin = initial.url.origin;
+  const queue = [initial.url.href]; const visitedMaps = new Set(); const pageUrls = new Set();
+  while (queue.length && visitedMaps.size < 5 && pageUrls.size < maxUrls) {
+    const mapUrl = queue.shift();
+    if (visitedMaps.has(mapUrl)) continue;
+    visitedMaps.add(mapUrl);
+    await checkRobots(mapUrl);
+    const page = await fetchPublicPage(mapUrl);
+    if (!/(xml|rss|atom)/.test(page.type)) throw new Error("Sitemap must be an XML document.");
+    const $ = cheerio.loadBuffer(page.buffer, { xmlMode: true });
+    const locations = $("sitemapindex > sitemap > loc, urlset > url > loc").toArray().map((node) => $(node).text().trim()).filter(Boolean);
+    if (!locations.length) throw new Error("No sitemap locations found in this XML document.");
+    for (const location of locations) {
+      try {
+        const target = new URL(location, page.finalUrl);
+        if (!(["http:", "https:"].includes(target.protocol) && target.origin === origin)) continue;
+        target.hash = "";
+        if ($("sitemapindex").length) {
+          if (!visitedMaps.has(target.href) && !queue.includes(target.href) && queue.length < 5) queue.push(target.href);
+        } else if (pageUrls.size < maxUrls) pageUrls.add(target.href);
+      } catch {}
+      if (pageUrls.size >= maxUrls) break;
+    }
+  }
+  const urls = [...pageUrls]; const results = [];
+  for (let i = 0; i < urls.length; i += 3) {
+    const batch = await Promise.all(urls.slice(i, i + 3).map(async (target) => {
+      try { return { ok: true, ...(await scrapePage(target, selector)) }; }
+      catch (error) { return { ok: false, requestedUrl: target, error: error.message }; }
+    }));
+    results.push(...batch);
+  }
+  return { sitemapUrl: input, origin, count: results.length, results };
+}
+
 async function checkRobots(input) {
   const initial = await publicTarget(input);
   let robots = "";
@@ -554,6 +591,14 @@ export const server = createServer(async (req, res) => {
       const maxDepth = Math.min(3, Math.max(0, Math.floor(Number(input.maxDepth) || 0)));
       if (typeof input.selector === "string" && input.selector.length > 200) return send(res, 400, { error: "CSS selector is limited to 200 characters." });
       return send(res, 200, await crawlSite(input.url, maxPages, maxDepth, input.selector ?? ""));
+    }
+    if (req.method === "GET" && url.pathname === "/api/web/sitemap") {
+      const sitemapUrl = url.searchParams.get("url") ?? "";
+      if (!sitemapUrl || sitemapUrl.length > 2048) return send(res, 400, { error: "Enter a sitemap URL up to 2048 characters." });
+      const maxUrls = Math.min(50, Math.max(1, Math.floor(Number(url.searchParams.get("limit") ?? 20) || 20)));
+      const selector = url.searchParams.get("selector") ?? "";
+      if (selector.length > 200) return send(res, 400, { error: "CSS selector is limited to 200 characters." });
+      return send(res, 200, await collectSitemap(sitemapUrl, maxUrls, selector));
     }
     if (req.method === "GET" && url.pathname === "/api/youtube/search") {
       if (!process.env.YOUTUBE_API_KEY) return send(res, 503, { error: "Set YOUTUBE_API_KEY to enable official YouTube search." });

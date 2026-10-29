@@ -90,6 +90,15 @@ $("#crawl-form").addEventListener("submit", async (event) => {
   } catch (error) { showMessage(results, error.message, "error"); }
 });
 
+$("#sitemap-form").addEventListener("submit", async (event) => {
+  event.preventDefault(); const results = $("#sitemap-results"); showMessage(results, "Reading sitemap and collecting listed pages…", "loading");
+  try {
+    const query = new URLSearchParams({ url: $("#sitemap-url").value.trim(), limit: $("#sitemap-limit").value, selector: $("#scrape-selector").value });
+    const response = await fetch(`/api/web/sitemap?${query}`); const data = await response.json(); if (!response.ok) throw new Error(data.error ?? "Sitemap collection failed");
+    renderScrapeResults(results, data.results, "sitemap-pages.json");
+  } catch (error) { showMessage(results, error.message, "error"); }
+});
+
 let latestRepositories = [];
 $("#github-form").addEventListener("submit", async (event) => {
   event.preventDefault(); const results = $("#github-results"); showMessage(results, "Searching public repositories…", "loading");
