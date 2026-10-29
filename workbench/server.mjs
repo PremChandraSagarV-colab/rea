@@ -9,6 +9,7 @@ const port = Number(process.env.PORT ?? 3000);
 const production = process.env.NODE_ENV === "production";
 const sessions = new Map();
 const sessionCookie = "rea_session";
+const sessionTtlMs = 24 * 60 * 60 * 1000;
 
 try {
   const envText = await readFile(join(root, ".env"), "utf8");
@@ -61,7 +62,14 @@ function cookieOptions(value, maxAge) {
 
 function getSession(req) {
   const id = cookies(req)[sessionCookie];
-  return id ? sessions.get(id) : undefined;
+  const session = id ? sessions.get(id) : undefined;
+  if (!session) return undefined;
+  if (Date.now() - session.lastSeenAt > sessionTtlMs) {
+    sessions.delete(id);
+    return undefined;
+  }
+  session.lastSeenAt = Date.now();
+  return session;
 }
 
 async function googleToken(fields) {
@@ -73,6 +81,15 @@ async function googleToken(fields) {
   const data = await response.json();
   if (!response.ok) throw new Error(data.error_description ?? data.error ?? "Google OAuth request failed");
   return data;
+}
+
+async function sessionAccessToken(session) {
+  if (session.accessToken && session.tokenExpiresAt > Date.now() + 30_000) return session.accessToken;
+  if (!session.refreshToken) return null;
+  const tokens = await googleToken({ grant_type: "refresh_token", refresh_token: session.refreshToken });
+  session.accessToken = tokens.access_token;
+  session.tokenExpiresAt = Date.now() + (tokens.expires_in ?? 3600) * 1000;
+  return session.accessToken;
 }
 
 async function gmailSearch(token, query, maxResults) {
@@ -99,9 +116,10 @@ const server = createServer(async (req, res) => {
       if (url.searchParams.get("error")) return send(res, 400, "Google authorization was cancelled", "text/plain; charset=utf-8");
       const tokens = await googleToken({ code: url.searchParams.get("code") ?? "", redirect_uri: process.env.GOOGLE_REDIRECT_URI, grant_type: "authorization_code" });
       session.accessToken = tokens.access_token;
+      session.refreshToken = tokens.refresh_token;
       session.tokenExpiresAt = Date.now() + (tokens.expires_in ?? 3600) * 1000;
       session.oauthState = undefined;
-      res.writeHead(302, { location: "/", "set-cookie": cookieOptions(cookies(req)[sessionCookie], 3600), "cache-control": "no-store" });
+      res.writeHead(302, { location: "/", "set-cookie": cookieOptions(cookies(req)[sessionCookie], 86_400), "cache-control": "no-store" });
       return res.end();
     }
     if (req.method === "GET" && url.pathname === "/healthz") return send(res, 200, "ok", "text/plain; charset=utf-8");
@@ -116,11 +134,11 @@ const server = createServer(async (req, res) => {
           if (oldest) sessions.delete(oldest);
         }
         id = randomBytes(32).toString("hex");
-        session = { createdAt: Date.now() };
+        session = { lastSeenAt: Date.now() };
         sessions.set(id, session);
       }
-      for (const [key, value] of sessions) if (Date.now() - value.createdAt > 3_600_000) sessions.delete(key);
-      return send(res, 200, { gmailConfigured: Boolean(process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET && process.env.GOOGLE_REDIRECT_URI), gmailConnected: Boolean(session.accessToken && session.tokenExpiresAt > Date.now()) }, "application/json; charset=utf-8", { "set-cookie": cookieOptions(id, 3600) });
+      for (const [key, value] of sessions) if (Date.now() - value.lastSeenAt > sessionTtlMs) sessions.delete(key);
+      return send(res, 200, { gmailConfigured: Boolean(process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET && process.env.GOOGLE_REDIRECT_URI), gmailConnected: Boolean(session.refreshToken || (session.accessToken && session.tokenExpiresAt > Date.now())) }, "application/json; charset=utf-8", { "set-cookie": cookieOptions(id, 86_400) });
     }
     if (req.method === "GET" && url.pathname === "/auth/google") {
       if (!process.env.GOOGLE_CLIENT_ID || !process.env.GOOGLE_CLIENT_SECRET || !process.env.GOOGLE_REDIRECT_URI) return send(res, 503, "Google OAuth is not configured", "text/plain; charset=utf-8");
@@ -129,19 +147,21 @@ const server = createServer(async (req, res) => {
       if (!session) return send(res, 401, "Open the workbench first to create a session", "text/plain; charset=utf-8");
       const state = randomBytes(32).toString("hex");
       session.oauthState = state;
-      const params = new URLSearchParams({ client_id: process.env.GOOGLE_CLIENT_ID, redirect_uri: process.env.GOOGLE_REDIRECT_URI, response_type: "code", scope: "https://www.googleapis.com/auth/gmail.readonly", access_type: "online", include_granted_scopes: "true", state });
+      const params = new URLSearchParams({ client_id: process.env.GOOGLE_CLIENT_ID, redirect_uri: process.env.GOOGLE_REDIRECT_URI, response_type: "code", scope: "https://www.googleapis.com/auth/gmail.readonly", access_type: "offline", prompt: "consent", include_granted_scopes: "true", state });
       res.writeHead(302, { location: `https://accounts.google.com/o/oauth2/v2/auth?${params}`, "cache-control": "no-store" });
       return res.end();
     }
     if (req.method === "GET" && url.pathname === "/api/gmail/search") {
       const session = getSession(req);
-      if (!session?.accessToken || session.tokenExpiresAt <= Date.now()) return send(res, 401, { error: "Connect your Gmail account first." });
+      if (!session) return send(res, 401, { error: "Connect your Gmail account first." });
       const query = (url.searchParams.get("q") ?? "").trim();
       if (!query) return send(res, 400, { error: "Enter a Gmail search query." });
       if (query.length > 500) return send(res, 400, { error: "Gmail search queries are limited to 500 characters." });
       const requested = Number(url.searchParams.get("limit") ?? 10);
       const maxResults = Number.isFinite(requested) ? Math.min(25, Math.max(1, Math.floor(requested))) : 10;
-      const messages = await gmailSearch(session.accessToken, query, maxResults);
+      const accessToken = await sessionAccessToken(session);
+      if (!accessToken) return send(res, 401, { error: "Connect your Gmail account first." });
+      const messages = await gmailSearch(accessToken, query, maxResults);
       return send(res, 200, { messages, count: messages.length });
     }
     if (req.method === "POST" && url.pathname === "/auth/disconnect") {
