@@ -34,7 +34,7 @@ globalThis.fetch = async (input, init) => {
   throw new Error(`Unexpected mock request: ${url.href}`);
 };
 
-const { server } = await import("./server.mjs");
+const { server, parseFeedDocument } = await import("./server.mjs");
 await new Promise((resolve) => setTimeout(resolve, 100));
 const origin = `http://127.0.0.1:${server.address().port}`;
 let response = await fetch(`${origin}/api/status`);
@@ -56,5 +56,9 @@ const channel = await response.json(); assert.equal(channel.videos.length, 2); a
 response = await fetch(`${origin}/api/chrome/targets?endpoint=https%3A%2F%2Fexample.com`); assert.equal(response.status, 400);
 response = await fetch(`${origin}/api/github/search?q=agents`); assert.equal((await response.json()).repositories[0].name, "sample/project");
 response = await fetch(`${origin}/api/github/repos/sample/project`); assert.equal((await response.json()).issues[0].number, 7);
-console.log("mock integration passed: Gmail search/body/attachment, YouTube search/video URL/channel uploads, GitHub repo/release/issue browsing, Chrome loopback guard");
+const rss = parseFeedDocument(Buffer.from(`<rss><channel><title>Example Blog</title><link>https://example.com/</link><item><title>First Post</title><link>/first</link><pubDate>Mon, 01 Jan 2025 00:00:00 GMT</pubDate><description>&lt;b&gt;First summary&lt;/b&gt;</description></item></channel></rss>`), "https://example.com/feed.xml");
+assert.equal(rss.title, "Example Blog"); assert.equal(rss.entries[0].url, "https://example.com/first"); assert.equal(rss.entries[0].summary, "First summary");
+const atom = parseFeedDocument(Buffer.from(`<feed xmlns="http://www.w3.org/2005/Atom"><title>Example Atom</title><entry><title>Atom Post</title><link href="/atom"/><updated>2025-01-02T00:00:00Z</updated><summary>Atom summary</summary></entry></feed>`), "https://example.com/atom.xml");
+assert.equal(atom.title, "Example Atom"); assert.equal(atom.entries[0].url, "https://example.com/atom");
+console.log("mock integration passed: Gmail search/body/attachment, YouTube search/video URL/channel uploads, GitHub repo/release/issue browsing, RSS/Atom parsing, Chrome loopback guard");
 await new Promise((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));

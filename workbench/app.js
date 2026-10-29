@@ -116,6 +116,28 @@ $("#github-form").addEventListener("submit", async (event) => {
   } catch (error) { showMessage(results, error.message, "error"); }
 });
 
+let latestFeed = null;
+$("#feed-form").addEventListener("submit", async (event) => {
+  event.preventDefault(); const results = $("#feed-results"); showMessage(results, "Collecting feed entries…", "loading");
+  try {
+    const query = new URLSearchParams({ url: $("#feed-url").value.trim() });
+    const response = await fetch(`/api/feeds/collect?${query}`); const data = await response.json(); if (!response.ok) throw new Error(data.error ?? "Feed collection failed");
+    latestFeed = data; results.replaceChildren();
+    const head = document.createElement("div"); head.className = "feed-head";
+    head.append(Object.assign(document.createElement("strong"), { textContent: data.title || "Public feed" }));
+    const exportButton = Object.assign(document.createElement("button"), { className: "copy export-button", textContent: "Download JSON" }); exportButton.addEventListener("click", () => downloadJson("feed-entries.json", latestFeed)); head.append(exportButton); results.append(head);
+    if (!data.entries.length) { showMessage(results, "No feed entries found."); return; }
+    for (const entry of data.entries) {
+      const card = document.createElement("article"); card.className = "feed-result";
+      if (entry.url) { const link = Object.assign(document.createElement("a"), { href: entry.url, target: "_blank", rel: "noreferrer", textContent: entry.title || entry.url }); card.append(link); }
+      else card.append(Object.assign(document.createElement("strong"), { textContent: entry.title || "Untitled entry" }));
+      if (entry.publishedAt) card.append(Object.assign(document.createElement("time"), { textContent: entry.publishedAt }));
+      if (entry.summary) card.append(Object.assign(document.createElement("p"), { className: "scrape-description", textContent: entry.summary }));
+      results.append(card);
+    }
+  } catch (error) { showMessage(results, error.message, "error"); }
+});
+
 let chromeTargets = [];
 function chromeQuery() {
   return new URLSearchParams({ endpoint: $("#chrome-endpoint").value.trim() || "http://127.0.0.1:9222" });

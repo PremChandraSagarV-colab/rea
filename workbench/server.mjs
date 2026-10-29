@@ -156,7 +156,7 @@ async function fetchPublicPage(input, redirects = 0) {
       }
       if (res.statusCode < 200 || res.statusCode >= 300) { res.resume(); reject(new Error(`Target returned HTTP ${res.statusCode}.`)); return; }
       const type = String(res.headers["content-type"] ?? "").toLowerCase();
-      if (!/(text\/html|application\/xhtml\+xml|text\/plain)/.test(type)) { res.resume(); reject(new Error("Target is not an HTML or plain-text page.")); return; }
+      if (!/(text\/html|application\/xhtml\+xml|text\/plain|application\/(?:rss\+xml|atom\+xml|xml)|text\/xml)/.test(type)) { res.resume(); reject(new Error("Target is not an HTML, XML, RSS, or Atom text resource.")); return; }
       if (Number(res.headers["content-length"] ?? 0) > 5_000_000) { res.destroy(); reject(new Error("Page exceeds the 5 MB limit.")); return; }
       const chunks = []; let size = 0;
       res.on("data", (chunk) => { size += chunk.length; if (size > 5_000_000) { res.destroy(new Error("Page exceeds the 5 MB limit.")); return; } chunks.push(chunk); });
@@ -174,15 +174,7 @@ async function fetchPublicPage(input, redirects = 0) {
 }
 
 async function scrapePage(input, selector = "") {
-  const initial = await publicTarget(input);
-  let robots = "";
-  try {
-    const policy = await fetchPublicPage(new URL("/robots.txt", initial.url).href);
-    robots = policy.buffer.toString("utf8");
-  } catch (error) {
-    if (!/HTTP (404|410)/.test(error.message)) throw new Error(`Could not verify this site's robots.txt: ${error.message}`);
-  }
-  if (!robotsAllows(robots, initial.url)) throw new Error("This page is disallowed by the site's robots.txt policy.");
+  const initial = await checkRobots(input);
   const page = await fetchPublicPage(input);
   const $ = cheerio.loadBuffer(page.buffer);
   const title = $("title").first().text().trim();
@@ -193,6 +185,44 @@ async function scrapePage(input, selector = "") {
   const text = chosen.text().replace(/\s+/g, " ").trim().slice(0, 30_000);
   const links = $("a[href]").toArray().slice(0, 100).flatMap((el) => { try { const target = new URL($(el).attr("href"), page.finalUrl); return ["http:", "https:"].includes(target.protocol) ? [{ text: $(el).text().replace(/\s+/g, " ").trim().slice(0, 250), url: target.href }] : []; } catch { return []; } });
   return { requestedUrl: input, finalUrl: page.finalUrl, status: page.status, title, description: description.slice(0, 1000), canonical, headings: $("h1,h2,h3").toArray().slice(0, 40).map((el) => $(el).text().replace(/\s+/g, " ").trim()).filter(Boolean), text, links };
+}
+
+async function checkRobots(input) {
+  const initial = await publicTarget(input);
+  let robots = "";
+  try {
+    const policy = await fetchPublicPage(new URL("/robots.txt", initial.url).href);
+    robots = policy.buffer.toString("utf8");
+  } catch (error) {
+    if (!/HTTP (404|410)/.test(error.message)) throw new Error(`Could not verify this site's robots.txt: ${error.message}`);
+  }
+  if (!robotsAllows(robots, initial.url)) throw new Error("This page is disallowed by the site's robots.txt policy.");
+  return initial;
+}
+
+async function collectFeed(input) {
+  const target = await checkRobots(input);
+  const page = await fetchPublicPage(input);
+  const parsed = parseFeedDocument(page.buffer, page.finalUrl);
+  return { feedUrl: page.finalUrl, ...parsed, fetchedAt: new Date().toISOString(), count: parsed.entries.length, robotsCheckedFor: target.url.origin };
+}
+
+export function parseFeedDocument(buffer, baseUrl) {
+  const $ = cheerio.loadBuffer(buffer, { xmlMode: true });
+  const feedTitle = $("channel > title, feed > title").first().text().trim();
+  const siteUrl = $("channel > link").first().text().trim() || $("feed > link[rel='alternate']").first().attr("href") || baseUrl;
+  const entries = $("item, entry").toArray().slice(0, 50).map((element) => {
+    const item = $(element);
+    const title = item.children("title").first().text().trim();
+    const linkNode = item.children("link").first();
+    const rawLink = linkNode.attr("href") ?? linkNode.text().trim() ?? item.children("guid").first().text().trim();
+    let link = ""; if (rawLink) { try { const resolved = new URL(rawLink, baseUrl); if (["http:", "https:"].includes(resolved.protocol)) link = resolved.href; } catch {} }
+    const summary = item.children("description, summary, content\\:encoded, content").first().text().trim();
+    const date = item.children("pubDate, published, updated, dc\\:date").first().text().trim();
+    return { title, url: link, publishedAt: date, summary: cheerio.load(summary).text().replace(/\s+/g, " ").trim().slice(0, 4000) };
+  });
+  let resolvedSiteUrl = baseUrl; try { const resolved = new URL(siteUrl, baseUrl); if (["http:", "https:"].includes(resolved.protocol)) resolvedSiteUrl = resolved.href; } catch {}
+  return { title: feedTitle, siteUrl: resolvedSiteUrl, entries };
 }
 
 function robotsAllows(robots, url) {
@@ -521,6 +551,11 @@ export const server = createServer(async (req, res) => {
       const match = /^\/api\/github\/repos\/([A-Za-z0-9_.-]{1,100})\/([A-Za-z0-9_.-]{1,100})$/.exec(url.pathname);
       if (!match) return send(res, 400, { error: "Enter a valid public owner/repository name." });
       return send(res, 200, await githubRepoDetails(match[1], match[2]));
+    }
+    if (req.method === "GET" && url.pathname === "/api/feeds/collect") {
+      const feedUrl = (url.searchParams.get("url") ?? "").trim();
+      if (!feedUrl || feedUrl.length > 2048) return send(res, 400, { error: "Enter an RSS or Atom feed URL up to 2048 characters." });
+      return send(res, 200, await collectFeed(feedUrl));
     }
     if (req.method === "POST" && url.pathname === "/auth/disconnect") {
       const origin = req.headers.origin;
