@@ -9,7 +9,7 @@
 
 ## Personal fork extension
 
-This fork adds an [REA Workbench](workbench/README.md) dashboard with local browser and app-analysis command helpers and optional Gmail search through Google's read-only API. Its Render Blueprint uses the free web-service plan; configure the OAuth client and service secrets before enabling Gmail or deploying it.
+This fork adds an [REA Workbench](workbench/README.md) dashboard with local browser and app-analysis workflows, a robots-aware public-page scraper, read-only Gmail message and attachment extraction, and public YouTube metadata search. Its Render Blueprint uses the free web-service plan; configure service credentials before enabling Google connectors or deploying it.
 
 **See a feature you like. Understand how it works, down to the binary level.**
 

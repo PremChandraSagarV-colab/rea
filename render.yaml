@@ -4,7 +4,7 @@ services:
     runtime: node
     plan: free
     rootDir: workbench
-    buildCommand: npm install --omit=dev --package-lock=false
+    buildCommand: npm ci --omit=dev
     startCommand: npm start
     healthCheckPath: /healthz
     envVars:
@@ -19,4 +19,6 @@ services:
       - key: GOOGLE_CLIENT_SECRET
         sync: false
       - key: GOOGLE_REDIRECT_URI
+        sync: false
+      - key: YOUTUBE_API_KEY
         sync: false
