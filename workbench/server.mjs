@@ -187,6 +187,34 @@ async function scrapePage(input, selector = "") {
   return { requestedUrl: input, finalUrl: page.finalUrl, status: page.status, title, description: description.slice(0, 1000), canonical, headings: $("h1,h2,h3").toArray().slice(0, 40).map((el) => $(el).text().replace(/\s+/g, " ").trim()).filter(Boolean), text, links };
 }
 
+async function crawlSite(seed, maxPages, maxDepth, selector = "") {
+  const initial = await publicTarget(seed);
+  const origin = initial.url.origin;
+  const normalize = (value) => { const url = new URL(value); url.hash = ""; return url.href; };
+  const visited = new Set(); const results = []; let frontier = [{ url: normalize(initial.url.href), depth: 0 }];
+  while (frontier.length && results.length < maxPages) {
+    const batch = frontier.splice(0, Math.min(3, maxPages - results.length));
+    const pages = await Promise.all(batch.map(async (entry) => {
+      visited.add(entry.url);
+      try { return { entry, result: { ok: true, depth: entry.depth, ...(await scrapePage(entry.url, selector)) } }; }
+      catch (error) { return { entry, result: { ok: false, depth: entry.depth, requestedUrl: entry.url, error: error.message } }; }
+    }));
+    for (const { entry, result } of pages) {
+      results.push(result);
+      if (!result.ok || entry.depth >= maxDepth) continue;
+      for (const link of result.links) {
+        try {
+          const target = new URL(link.url);
+          const candidate = normalize(target.href);
+          if (target.origin === origin && !visited.has(candidate) && !frontier.some((next) => next.url === candidate)) frontier.push({ url: candidate, depth: entry.depth + 1 });
+        } catch {}
+      }
+    }
+    if (frontier.length > maxPages - results.length) frontier.length = maxPages - results.length;
+  }
+  return { seedUrl: seed, origin, maxPages, maxDepth, count: results.length, results };
+}
+
 async function checkRobots(input) {
   const initial = await publicTarget(input);
   let robots = "";
@@ -518,6 +546,14 @@ export const server = createServer(async (req, res) => {
         results.push(...batch);
       }
       return send(res, 200, { results });
+    }
+    if (req.method === "POST" && url.pathname === "/api/web/crawl") {
+      const input = await readJson(req);
+      if (typeof input.url !== "string" || input.url.length > 2048) return send(res, 400, { error: "Enter a starting URL up to 2048 characters." });
+      const maxPages = Math.min(50, Math.max(1, Math.floor(Number(input.maxPages) || 20)));
+      const maxDepth = Math.min(3, Math.max(0, Math.floor(Number(input.maxDepth) || 0)));
+      if (typeof input.selector === "string" && input.selector.length > 200) return send(res, 400, { error: "CSS selector is limited to 200 characters." });
+      return send(res, 200, await crawlSite(input.url, maxPages, maxDepth, input.selector ?? ""));
     }
     if (req.method === "GET" && url.pathname === "/api/youtube/search") {
       if (!process.env.YOUTUBE_API_KEY) return send(res, 503, { error: "Set YOUTUBE_API_KEY to enable official YouTube search." });

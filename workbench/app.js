@@ -37,6 +37,24 @@ function downloadJson(filename, value) {
 function showMessage(container, text, className = "empty") {
   container.replaceChildren(Object.assign(document.createElement("p"), { className, textContent: text }));
 }
+function renderScrapeResults(container, items, filename = "web-scrape-results.json") {
+  latestScrape = items; container.replaceChildren();
+  const exportButton = Object.assign(document.createElement("button"), { className: "copy export-button", textContent: "Download JSON" });
+  exportButton.addEventListener("click", () => downloadJson(filename, latestScrape)); container.append(exportButton);
+  for (const item of items) {
+    const card = document.createElement("article"); card.className = "scrape-result";
+    const itemUrl = item.finalUrl ?? item.requestedUrl;
+    card.append(Object.assign(document.createElement("h3"), { textContent: item.title || itemUrl }));
+    if (itemUrl) card.append(Object.assign(document.createElement("a"), { href: itemUrl, target: "_blank", rel: "noreferrer", textContent: itemUrl }));
+    if (!item.ok) card.append(Object.assign(document.createElement("p"), { className: "error", textContent: item.error }));
+    else {
+      if (item.description) card.append(Object.assign(document.createElement("p"), { className: "scrape-description", textContent: item.description }));
+      card.append(Object.assign(document.createElement("p"), { className: "scrape-text", textContent: item.text || "No readable text found." }));
+      card.append(Object.assign(document.createElement("small"), { textContent: `${item.depth !== undefined ? `Depth ${item.depth} · ` : ""}${item.headings?.length ?? 0} headings · ${item.links?.length ?? 0} links · HTTP ${item.status}` }));
+    }
+    container.append(card);
+  }
+}
 async function refreshStatus() {
   try {
     const response = await fetch("/api/status");
@@ -59,22 +77,16 @@ $("#web-scrape-form").addEventListener("submit", async (event) => {
   try {
     const response = await fetch("/api/web/scrape", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ urls, selector: $("#scrape-selector").value }) });
     const data = await response.json(); if (!response.ok) throw new Error(data.error ?? "Scrape failed");
-    latestScrape = data.results;
-    results.replaceChildren();
-    const exportButton = Object.assign(document.createElement("button"), { className: "copy export-button", textContent: "Download JSON" });
-    exportButton.addEventListener("click", () => downloadJson("web-scrape-results.json", latestScrape)); results.append(exportButton);
-    for (const item of data.results) {
-      const card = document.createElement("article"); card.className = "scrape-result";
-      const title = Object.assign(document.createElement("h3"), { textContent: item.title || item.requestedUrl }); card.append(title);
-      const url = Object.assign(document.createElement("a"), { href: item.finalUrl ?? item.requestedUrl, target: "_blank", rel: "noreferrer", textContent: item.finalUrl ?? item.requestedUrl }); card.append(url);
-      if (!item.ok) card.append(Object.assign(document.createElement("p"), { className: "error", textContent: item.error }));
-      else {
-        if (item.description) card.append(Object.assign(document.createElement("p"), { className: "scrape-description", textContent: item.description }));
-        card.append(Object.assign(document.createElement("p"), { className: "scrape-text", textContent: item.text || "No readable text found." }));
-        card.append(Object.assign(document.createElement("small"), { textContent: `${item.headings.length} headings · ${item.links.length} links · HTTP ${item.status}` }));
-      }
-      results.append(card);
-    }
+    renderScrapeResults(results, data.results);
+  } catch (error) { showMessage(results, error.message, "error"); }
+});
+
+$("#crawl-form").addEventListener("submit", async (event) => {
+  event.preventDefault(); const results = $("#crawl-results"); showMessage(results, "Crawling same-origin pages…", "loading");
+  try {
+    const response = await fetch("/api/web/crawl", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ url: $("#crawl-url").value.trim(), maxPages: $("#crawl-limit").value, maxDepth: $("#crawl-depth").value, selector: $("#scrape-selector").value }) });
+    const data = await response.json(); if (!response.ok) throw new Error(data.error ?? "Crawl failed");
+    renderScrapeResults(results, data.results, "web-crawl-results.json");
   } catch (error) { showMessage(results, error.message, "error"); }
 });
 

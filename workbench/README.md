@@ -27,7 +27,7 @@ The workbench only connects to `localhost`, `127.0.0.1`, or `::1`; it can list o
 
 ## Web scraper
 
-Enter one to ten public HTML or plain-text page URLs, optionally with a CSS selector. It extracts the page title, description, canonical URL, headings, up to 100 links, and up to 30,000 characters of readable text. Requests follow the site's `robots.txt` rules and are limited to standard web ports, five redirects, 15 seconds, and 5 MB per page. Local/private/reserved IP targets and non-HTML resources are blocked. The scraper does not execute page JavaScript, load browser sessions, or bypass access controls; single-page apps may need the local Chrome/REA workflows instead.
+Enter one to ten public HTML or plain-text page URLs, optionally with a CSS selector, or crawl one site from a seed URL with a 1–50 page limit and depth up to three. Crawls follow same-origin links only. It extracts the page title, description, canonical URL, headings, up to 100 links, and up to 30,000 characters of readable text. Requests follow the site's `robots.txt` rules and are limited to standard web ports, five redirects, 15 seconds, and 5 MB per page. Local/private/reserved IP targets and non-HTML resources are blocked. The scraper does not execute page JavaScript, load browser sessions, or bypass access controls; single-page apps may need the local Chrome/REA workflows instead.
 
 ## GitHub explorer
 
