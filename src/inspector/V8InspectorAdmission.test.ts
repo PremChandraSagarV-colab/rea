@@ -1,6 +1,6 @@
 import { expect, it } from "vitest";
 
-import { ArtifactResourceScope } from "../artifacts/ArtifactResourceScope.js";
+import { awaitAcknowledgement } from "../../tests/fixtures/lifecycleAcknowledgement.js";
 import { V8InspectorAdmission } from "./V8InspectorProvider.js";
 
 const gate = (): { promise: Promise<void>; release: () => void } => {
@@ -62,23 +62,28 @@ it("closes one inspector file scope without waiting for another", async () => {
   const first = new V8InspectorAdmission();
   const second = new V8InspectorAdmission();
   const held = gate();
-  const original = ArtifactResourceScope.prototype.retryCleanup;
-  let calls = 0;
-  ArtifactResourceScope.prototype.retryCleanup = function (
-    this: ArtifactResourceScope,
-  ) {
-    calls += 1;
-    if (calls === 1) return held.promise.then(() => original.call(this));
-    return original.call(this);
+  let entered!: () => void;
+  const started = new Promise<void>((resolve) => {
+    entered = resolve;
+  });
+  const scope = first.files;
+  const original = scope.retryCleanup;
+  scope.retryCleanup = function (this: typeof scope) {
+    entered();
+    return held.promise.then(() => original.call(this));
   };
   const closingFirst = first.close();
   const closingSecond = second.close();
   try {
-    await expect(closingSecond).resolves.toBeUndefined();
-    expect(calls).toBe(2);
+    await awaitAcknowledgement(started, closingFirst, "first file cleanup");
+    await awaitAcknowledgement(
+      closingSecond.then(() => undefined),
+      closingFirst,
+      "second file cleanup",
+    );
   } finally {
-    ArtifactResourceScope.prototype.retryCleanup = original;
     held.release();
     await Promise.allSettled([closingFirst, closingSecond]);
+    scope.retryCleanup = original;
   }
 });
