@@ -48,5 +48,6 @@ response = await fetch(`${origin}/api/youtube/videos`, { method: "POST", headers
 assert.equal((await response.json()).videos[0].title, "Video abcdefghijk");
 response = await fetch(`${origin}/api/youtube/channel?channel=%40sample&limit=2`);
 const channel = await response.json(); assert.equal(channel.videos.length, 2); assert.equal(channel.channel.title, "Example Channel");
-console.log("mock integration passed: Gmail search/body/attachment, YouTube search/video URL/channel uploads");
+response = await fetch(`${origin}/api/chrome/targets?endpoint=https%3A%2F%2Fexample.com`); assert.equal(response.status, 400);
+console.log("mock integration passed: Gmail search/body/attachment, YouTube search/video URL/channel uploads, Chrome loopback guard");
 await new Promise((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));

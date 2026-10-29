@@ -78,6 +78,46 @@ $("#web-scrape-form").addEventListener("submit", async (event) => {
   } catch (error) { showMessage(results, error.message, "error"); }
 });
 
+let chromeTargets = [];
+function chromeQuery() {
+  return new URLSearchParams({ endpoint: $("#chrome-endpoint").value.trim() || "http://127.0.0.1:9222" });
+}
+async function findChromeTargets() {
+  const select = $("#chrome-target"); const status = $("#chrome-status");
+  status.textContent = "Connecting to local Chrome…";
+  try {
+    const response = await fetch(`/api/chrome/targets?${chromeQuery()}`); const data = await response.json(); if (!response.ok) throw new Error(data.error ?? "Could not connect to Chrome");
+    chromeTargets = data.targets; select.replaceChildren();
+    if (!chromeTargets.length) select.append(new Option("No open page tabs found", ""));
+    for (const target of chromeTargets) select.append(new Option(`${target.title || "Untitled"} · ${target.url}`, target.id));
+    status.textContent = `${chromeTargets.length} local tab${chromeTargets.length === 1 ? "" : "s"}`; status.className = "status good";
+  } catch (error) {
+    chromeTargets = []; select.replaceChildren(new Option("Chrome connection unavailable", "")); status.textContent = error.message; status.className = "status";
+  }
+  $("#chrome-inspect").disabled = !chromeTargets.length;
+  $("#chrome-screenshot").disabled = !chromeTargets.length;
+}
+$("#chrome-form").addEventListener("submit", async (event) => { event.preventDefault(); await findChromeTargets(); });
+$("#chrome-target").addEventListener("change", () => {
+  const enabled = Boolean($("#chrome-target").value); $("#chrome-inspect").disabled = !enabled; $("#chrome-screenshot").disabled = !enabled;
+});
+async function inspectChrome(withScreenshot) {
+  const results = $("#chrome-results"); showMessage(results, withScreenshot ? "Capturing the current tab…" : "Reading the current tab…", "loading");
+  const query = chromeQuery(); query.set("id", $("#chrome-target").value); if (withScreenshot) query.set("screenshot", "1");
+  try {
+    const response = await fetch(`/api/chrome/inspect?${query}`); const data = await response.json(); if (!response.ok) throw new Error(data.error ?? "Chrome inspection failed");
+    results.replaceChildren();
+    results.append(Object.assign(document.createElement("h3"), { className: "channel-title", textContent: data.title || "Untitled page" }));
+    const url = Object.assign(document.createElement("a"), { href: data.url, target: "_blank", rel: "noreferrer", textContent: data.url }); url.className = "scrape-result-link"; results.append(url);
+    results.append(Object.assign(document.createElement("p"), { className: "scrape-text", textContent: data.text || "No readable page text." }));
+    if (data.screenshot) { const image = Object.assign(document.createElement("img"), { className: "chrome-shot", src: data.screenshot, alt: `Screenshot of ${data.title || data.url}` }); results.append(image); }
+    const exportButton = Object.assign(document.createElement("button"), { className: "copy export-button", textContent: "Download page data" });
+    const exported = { ...data }; delete exported.screenshot; exportButton.addEventListener("click", () => downloadJson("chrome-page-inspection.json", exported)); results.append(exportButton);
+  } catch (error) { showMessage(results, error.message, "error"); }
+}
+$("#chrome-inspect").addEventListener("click", () => inspectChrome(false));
+$("#chrome-screenshot").addEventListener("click", () => inspectChrome(true));
+
 function renderYoutubeVideos(container, videos, channel = null) {
   latestVideos = videos; container.replaceChildren();
   if (channel) {

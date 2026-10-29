@@ -8,6 +8,7 @@ import { request as httpsRequest } from "node:https";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import * as cheerio from "cheerio";
+import puppeteer from "puppeteer-core";
 
 const root = dirname(fileURLToPath(import.meta.url));
 const port = Number(process.env.PORT ?? 3000);
@@ -300,6 +301,58 @@ function youtubeVideoId(input) {
   return null;
 }
 
+function localChromeEndpoint(input) {
+  let endpoint;
+  try { endpoint = new URL(input || "http://127.0.0.1:9222"); } catch { throw new Error("Enter a valid local Chrome DevTools URL."); }
+  if (endpoint.protocol !== "http:" || !["127.0.0.1", "localhost", "[::1]"].includes(endpoint.hostname.toLowerCase()) || endpoint.username || endpoint.password || !["", "/"].includes(endpoint.pathname) || endpoint.search || endpoint.hash) throw new Error("Chrome connections are restricted to a local http endpoint such as http://127.0.0.1:9222.");
+  return endpoint.origin;
+}
+
+async function withChrome(endpointInput, action) {
+  const endpoint = localChromeEndpoint(endpointInput);
+  const browser = await puppeteer.connect({ browserURL: endpoint, defaultViewport: null, protocolTimeout: 10_000 });
+  try { return await action(browser); } finally { await browser.disconnect(); }
+}
+
+async function chromeTargets(browser) {
+  const pages = browser.targets().filter((target) => target.type() === "page").slice(0, 50);
+  return Promise.all(pages.map(async (target) => {
+    const session = await target.createCDPSession();
+    try {
+      const { targetInfo } = await session.send("Target.getTargetInfo");
+      return { id: targetInfo.targetId, title: targetInfo.title, url: targetInfo.url };
+    } finally { await session.detach(); }
+  }));
+}
+
+async function chromePage(browser, targetId) {
+  if (!/^[\w-]{1,128}$/.test(targetId)) throw new Error("Invalid Chrome target ID.");
+  const pages = browser.targets().filter((target) => target.type() === "page");
+  for (const target of pages) {
+    const session = await target.createCDPSession();
+    let found;
+    try { found = (await session.send("Target.getTargetInfo")).targetInfo.targetId === targetId; }
+    finally { await session.detach(); }
+    if (found) return target.page();
+  }
+  throw new Error("That Chrome tab is no longer open. Refresh the target list.");
+}
+
+async function inspectChromeTarget(browser, targetId, includeScreenshot) {
+  const page = await chromePage(browser, targetId);
+  if (!page) throw new Error("Chrome target is not a page.");
+  const details = await page.evaluate(() => ({
+    title: document.title,
+    url: location.href,
+    description: document.querySelector('meta[name="description"]')?.content ?? "",
+    headings: Array.from(document.querySelectorAll("h1,h2,h3")).slice(0, 40).map((item) => item.innerText.trim()).filter(Boolean),
+    text: (document.body?.innerText ?? "").replace(/\s+/g, " ").trim().slice(0, 20_000),
+    links: Array.from(document.querySelectorAll("a[href]")).slice(0, 100).map((item) => ({ text: item.innerText.trim().slice(0, 250), url: item.href })),
+  }));
+  if (includeScreenshot) details.screenshot = `data:image/jpeg;base64,${(await page.screenshot({ type: "jpeg", quality: 55, fullPage: false })).toString("base64")}`;
+  return details;
+}
+
 export const server = createServer(async (req, res) => {
   try {
     const url = new URL(req.url, `http://${req.headers.host ?? "localhost"}`);
@@ -333,6 +386,24 @@ export const server = createServer(async (req, res) => {
       }
       for (const [key, value] of sessions) if (Date.now() - value.lastSeenAt > sessionTtlMs) sessions.delete(key);
       return send(res, 200, { gmailConfigured: Boolean(process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET && process.env.GOOGLE_REDIRECT_URI), gmailConnected: Boolean(session.refreshToken || (session.accessToken && session.tokenExpiresAt > Date.now())), youtubeConfigured: Boolean(process.env.YOUTUBE_API_KEY) }, "application/json; charset=utf-8", { "set-cookie": cookieOptions(id, 86_400) });
+    }
+    if (req.method === "GET" && url.pathname === "/api/chrome/targets") {
+      let endpoint;
+      try { endpoint = localChromeEndpoint(url.searchParams.get("endpoint") ?? "http://127.0.0.1:9222"); }
+      catch (error) { return send(res, 400, { error: error.message }); }
+      try { return send(res, 200, { targets: await withChrome(endpoint, chromeTargets) }); }
+      catch { return send(res, 503, { error: "Could not reach Chrome. Start a local Chrome session with remote debugging on this port." }); }
+    }
+    if (req.method === "GET" && url.pathname === "/api/chrome/inspect") {
+      let endpoint;
+      try { endpoint = localChromeEndpoint(url.searchParams.get("endpoint") ?? "http://127.0.0.1:9222"); }
+      catch (error) { return send(res, 400, { error: error.message }); }
+      const targetId = url.searchParams.get("id") ?? "";
+      if (!/^[\w-]{1,128}$/.test(targetId)) return send(res, 400, { error: "Choose a valid Chrome tab to inspect." });
+      try {
+        const details = await withChrome(endpoint, (browser) => inspectChromeTarget(browser, targetId, url.searchParams.get("screenshot") === "1"));
+        return send(res, 200, details);
+      } catch (error) { return send(res, 503, { error: error.message }); }
     }
     if (req.method === "GET" && url.pathname === "/auth/google") {
       if (!process.env.GOOGLE_CLIENT_ID || !process.env.GOOGLE_CLIENT_SECRET || !process.env.GOOGLE_REDIRECT_URI) return send(res, 503, "Google OAuth is not configured", "text/plain; charset=utf-8");

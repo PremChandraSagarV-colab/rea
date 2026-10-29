@@ -15,6 +15,16 @@ Edit `.env` with your values. Open `http://localhost:3000`. The dashboard can ru
 
 Run `npm test` in `workbench/` for a mock-provider integration check of Gmail search/body/attachment routes and YouTube search/video/channel collection.
 
+### Chrome inspection
+
+Start a separate Chrome profile with remote debugging enabled, then select **Find tabs** in the local dashboard. For Chrome 136 and later, Chrome requires a non-default profile for the remote debugging switch. For example, in PowerShell (adjust the Chrome executable path if needed):
+
+```powershell
+& "$env:ProgramFiles\Google\Chrome\Application\chrome.exe" --remote-debugging-port=9222 --user-data-dir="$env:LOCALAPPDATA\REA\ChromeProfile"
+```
+
+The workbench only connects to `localhost`, `127.0.0.1`, or `::1`; it can list open tabs, read the selected tab's rendered title/text/links, and capture a screenshot. Use a dedicated profile because a remote debugging connection can access that profile's open pages and session data. A hosted Render service cannot reach Chrome on your PC, so this feature works with the local workbench.
+
 ## Web scraper
 
 Enter one to ten public HTML or plain-text page URLs, optionally with a CSS selector. It extracts the page title, description, canonical URL, headings, up to 100 links, and up to 30,000 characters of readable text. Requests follow the site's `robots.txt` rules and are limited to standard web ports, five redirects, 15 seconds, and 5 MB per page. Local/private/reserved IP targets and non-HTML resources are blocked. The scraper does not execute page JavaScript, load browser sessions, or bypass access controls; single-page apps may need the local Chrome/REA workflows instead.
