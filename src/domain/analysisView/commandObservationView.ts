@@ -137,7 +137,7 @@ export const projectCommandObservationView = (
     const { console, target, log, ...records } = parsed.value;
     return ok({
       ...shared,
-      parent_operation: "gdb_console",
+      parent_operation: "gdb_console" as const,
       summary: {
         ...records,
         available_counts: {
@@ -171,7 +171,7 @@ export const projectCommandObservationView = (
     );
   return ok({
     ...shared,
-    parent_operation: "inspect_with_objdump",
+    parent_operation: "inspect_with_objdump" as const,
     summary: report,
   });
 };

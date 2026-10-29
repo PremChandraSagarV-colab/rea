@@ -186,7 +186,7 @@ export const projectGoBinaryView = (
   };
   if (view.kind === "summary")
     return ok({
-      kind: "summary",
+      kind: "summary" as const,
       view,
       ...shared,
       summary: {
@@ -245,10 +245,10 @@ export const projectGoBinaryView = (
       }),
     );
     return ok({
-      kind: "go",
+      kind: "go" as const,
       view,
       ...shared,
-      page: { collection: "dependencies", rows: selected.rows },
+      page: { collection: "dependencies" as const, rows: selected.rows },
       coverage: pageViewCoverage(
         view.offset,
         selected.rows.length,
@@ -269,10 +269,10 @@ export const projectGoBinaryView = (
     }),
   );
   return ok({
-    kind: "go",
+    kind: "go" as const,
     view,
     ...shared,
-    page: { collection: "settings", rows: selected.rows },
+    page: { collection: "settings" as const, rows: selected.rows },
     coverage: pageViewCoverage(
       view.offset,
       selected.rows.length,

@@ -119,7 +119,7 @@ export const projectAndroidSymbolSummary = (
     if (!parsed.ok) return parsed;
     return boundedSummary({
       ...shared,
-      parent_operation: "inspect_android_class",
+      parent_operation: "inspect_android_class" as const,
       summary: parsed.value,
     });
   }
@@ -127,7 +127,7 @@ export const projectAndroidSymbolSummary = (
   if (!parsed.ok) return parsed;
   return boundedSummary({
     ...shared,
-    parent_operation: "inspect_android_method",
+    parent_operation: "inspect_android_method" as const,
     summary: parsed.value,
     unknowns: [
       ...shared.unknowns,

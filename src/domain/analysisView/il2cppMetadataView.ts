@@ -657,7 +657,7 @@ export const projectIl2cppMetadataView = (
                 }),
           }))(report.binary);
     return ok({
-      kind: "summary",
+      kind: "summary" as const,
       view,
       ...shared,
       summary: {
@@ -733,7 +733,7 @@ export const projectIl2cppMetadataView = (
     }
   }
   return ok({
-    kind: "il2cpp-metadata",
+    kind: "il2cpp-metadata" as const,
     view,
     ...shared,
     items,

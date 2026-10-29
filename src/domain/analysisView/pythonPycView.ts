@@ -99,7 +99,7 @@ export const projectPythonPycView = (
   if (view.kind === "summary")
     return ok({
       ...shared,
-      kind: "summary",
+      kind: "summary" as const,
       view,
       summary,
       coverage: completeWithinViewCoverage(
@@ -135,7 +135,7 @@ export const projectPythonPycView = (
         );
   return ok({
     ...shared,
-    kind: "python-pyc",
+    kind: "python-pyc" as const,
     view,
     pyc: summary,
     items: selected.rows,

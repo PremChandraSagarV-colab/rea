@@ -322,7 +322,7 @@ export const projectManagedMemberView = (
       0,
     );
     return ok({
-      kind: "summary",
+      kind: "summary" as const,
       view,
       ...shared,
       summary,
@@ -350,7 +350,7 @@ export const projectManagedMemberView = (
       `${page.unresolved_filter_rows} source rows have unknown requested names or declaring types and may match the filters; the matched total excludes them.`,
     );
   return ok({
-    kind: "managed-members",
+    kind: "managed-members" as const,
     view,
     page,
     ...shared,

@@ -134,7 +134,7 @@ export const projectNativeExportsView = (
   if (view.kind === "summary")
     return ok({
       ...shared,
-      kind: "summary",
+      kind: "summary" as const,
       view,
       summary,
       coverage: completeWithinViewCoverage(exports.length, exports.length),
@@ -161,7 +161,7 @@ export const projectNativeExportsView = (
           );
     return ok({
       ...shared,
-      kind: "native-exports",
+      kind: "native-exports" as const,
       view,
       exports: summary,
       items: selected.rows,
@@ -249,7 +249,7 @@ export const projectNativeExportsView = (
         );
   return ok({
     ...shared,
-    kind: "native-exports",
+    kind: "native-exports" as const,
     view,
     exports: summary,
     items: selected.rows,

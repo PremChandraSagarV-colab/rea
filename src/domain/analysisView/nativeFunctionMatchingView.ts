@@ -288,7 +288,7 @@ export const projectNativeFunctionMatchingView = (
   const shared = sharedContext(parent, entry.report);
   if (view.kind === "summary")
     return ok({
-      kind: "summary",
+      kind: "summary" as const,
       view,
       ...shared,
       summary: context,
@@ -297,7 +297,7 @@ export const projectNativeFunctionMatchingView = (
   const rows = filterRows(entry, view),
     items = selectedItems(entry, view, rows);
   return ok({
-    kind: "function-matches",
+    kind: "function-matches" as const,
     view,
     ...shared,
     ...context,

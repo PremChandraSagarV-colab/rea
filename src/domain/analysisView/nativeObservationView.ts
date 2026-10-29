@@ -305,7 +305,7 @@ export const projectNativeObservationView = (
     const { total, ...page } = contextRows(context.value, view);
     return ok({
       ...common,
-      kind: "native-context",
+      kind: "native-context" as const,
       ...page,
       parent_operation: source.value.operation,
       coverage:
@@ -330,6 +330,6 @@ export const projectNativeObservationView = (
     coverage: pageViewCoverage(selection.offset, page.items.rows.length, total),
   };
   return view.kind === "summary"
-    ? ok({ ...observation, kind: "summary", view })
-    : ok({ ...observation, kind: "native-observation", view });
+    ? ok({ ...observation, kind: "summary" as const, view })
+    : ok({ ...observation, kind: "native-observation" as const, view });
 };

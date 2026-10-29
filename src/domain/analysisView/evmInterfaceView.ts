@@ -99,7 +99,7 @@ export const projectEvmInterfaceView = (
     const { hex: _hex, ...bytecode } = report.bytecode;
     const { stdout, ...diagnostics } = report.diagnostics;
     return ok({
-      kind: "summary",
+      kind: "summary" as const,
       view,
       ...shared,
       summary: {
@@ -121,7 +121,7 @@ export const projectEvmInterfaceView = (
   if (view.facet === "functions") {
     const item = report.functions.slice(view.offset, view.offset + view.limit);
     return ok({
-      kind: "evm",
+      kind: "evm" as const,
       view,
       item,
       ...shared,
@@ -137,5 +137,7 @@ export const projectEvmInterfaceView = (
       ? report.bytecode.hex
       : report.diagnostics[view.facet];
   const page = analysisTextPage(text, view.offset, view.limit, view.facet);
-  return page.ok ? ok({ kind: "evm", view, ...page.value, ...shared }) : page;
+  return page.ok
+    ? ok({ kind: "evm" as const, view, ...page.value, ...shared })
+    : page;
 };

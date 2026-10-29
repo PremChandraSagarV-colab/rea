@@ -102,7 +102,7 @@ export const projectDevicetreeView = (
   if (view.kind === "summary")
     return ok({
       ...shared,
-      kind: "summary",
+      kind: "summary" as const,
       view,
       summary: { ...context, summary: r.summary },
       coverage: completeWithinViewCoverage(r.nodes.length, r.nodes.length),
@@ -151,7 +151,7 @@ export const projectDevicetreeView = (
   const { items, total } = selected;
   return ok({
     ...shared,
-    kind: "devicetree",
+    kind: "devicetree" as const,
     view,
     devicetree: { ...context, alias_count: r.summary.aliases.length },
     items,

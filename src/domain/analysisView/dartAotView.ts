@@ -93,7 +93,7 @@ export const projectDartAotView = (
   };
   if (view.kind === "summary")
     return ok({
-      kind: "summary",
+      kind: "summary" as const,
       view,
       ...shared,
       summary: { ...report, string_pool },
@@ -102,7 +102,7 @@ export const projectDartAotView = (
   const collection = report.string_pool[view.collection];
   const items = collection.slice(view.offset, view.offset + view.limit);
   return ok({
-    kind: "dart-aot",
+    kind: "dart-aot" as const,
     view,
     ...shared,
     items,

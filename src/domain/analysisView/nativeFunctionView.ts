@@ -202,7 +202,7 @@ const summaryView = (
   dossier: FunctionDossier,
   common: ReturnType<typeof parentFields>,
 ) => ({
-  kind: "summary",
+  kind: "summary" as const,
   view,
   summary: summarizeDossier(dossier),
   coverage: completeWithinViewCoverage(1, 1),
@@ -247,7 +247,7 @@ export const projectNativeFunctionView = (
   if (availability?.available === false)
     common.unknowns = uniqueSorted([...common.unknowns, availability.reason]);
   const singleton = (item: unknown) => ({
-    kind: "native",
+    kind: "native" as const,
     view,
     item: jsonValueSchema.parse(item),
     coverage: completeWithinViewCoverage(1, 1),
@@ -293,7 +293,7 @@ export const projectNativeFunctionView = (
   if (view.facet === "pseudocode") {
     const page = analysisTextPage(dossier.pseudocode, view.offset, view.limit);
     return page.ok
-      ? ok({ kind: "native", view, ...page.value, ...common })
+      ? ok({ kind: "native" as const, view, ...page.value, ...common })
       : page;
   }
   const rows = nativeRows(dossier, view.facet);
@@ -312,7 +312,7 @@ export const projectNativeFunctionView = (
     );
   const items = rows.slice(view.offset, view.offset + view.limit);
   return ok({
-    kind: "native",
+    kind: "native" as const,
     view,
     item: jsonValueSchema.parse(items),
     coverage: pageViewCoverage(view.offset, items.length, rows.length),

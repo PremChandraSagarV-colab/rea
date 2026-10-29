@@ -196,7 +196,7 @@ export const projectBinaryLayoutView = (
   if (view.kind === "summary") {
     assertOwnedView<SummaryAnalysisView>(view, "summary");
     return ok({
-      kind: "summary",
+      kind: "summary" as const,
       view,
       summary: layoutSummary(layout),
       coverage: completeCoverage(
@@ -215,7 +215,7 @@ export const projectBinaryLayoutView = (
   if (view.kind === "facet") {
     assertOwnedView<FacetAnalysisView>(view, "facet");
     return ok({
-      kind: "facet",
+      kind: "facet" as const,
       view,
       facet: view.facet === "mitigations" ? layout.mitigations : layout.linkage,
       coverage: completeCoverage(1, 1),
@@ -236,7 +236,7 @@ export const projectBinaryLayoutView = (
         : selectLayoutItem(view.collection, layout.symbols, view.selector);
     if (!selected.ok) return selected;
     return ok({
-      kind: "item",
+      kind: "item" as const,
       view,
       item: selected.value,
       coverage: completeCoverage(
@@ -268,7 +268,7 @@ export const projectBinaryLayoutView = (
       ? pageRows(layout.sections, view.offset, view.limit)
       : pageRows(layout.symbols, view.offset, view.limit);
   return ok({
-    kind: "page",
+    kind: "page" as const,
     view,
     items: [...items],
     coverage: pageCoverage(view.offset, items.length, rows.length),

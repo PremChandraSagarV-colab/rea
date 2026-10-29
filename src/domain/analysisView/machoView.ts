@@ -207,7 +207,7 @@ export const projectMachoView = (
       parent.limitations,
     );
     return ok({
-      kind: "summary",
+      kind: "summary" as const,
       view,
       ...shared,
       limitations,

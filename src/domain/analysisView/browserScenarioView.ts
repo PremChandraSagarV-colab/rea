@@ -345,7 +345,7 @@ export const projectBrowserScenarioView = (
   };
   if (view.kind === "summary")
     return ok({
-      kind: "summary",
+      kind: "summary" as const,
       view,
       ...shared,
       summary: {
@@ -377,7 +377,7 @@ export const projectBrowserScenarioView = (
       ]),
     );
   return ok({
-    kind: "browser-scenario",
+    kind: "browser-scenario" as const,
     view,
     ...shared,
     source_completeness: capture.completeness,

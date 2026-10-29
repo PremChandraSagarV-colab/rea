@@ -116,16 +116,16 @@ export const projectNativeInventoryView = (
   if (view.kind === "summary")
     return ok({
       ...shared,
-      kind: "summary",
+      kind: "summary" as const,
       view,
       summary: {
         collection: strings
-          ? "strings"
+          ? ("strings" as const)
           : parent.operation === "list_names"
-            ? "names"
-            : "procedures",
+            ? ("names" as const)
+            : ("procedures" as const),
         row_count: rows.length,
-        discovery_coverage: "unknown",
+        discovery_coverage: "unknown" as const,
         selectable_fields: fieldSchema.options,
       },
       coverage: completeWithinViewCoverage(rows.length, rows.length),
@@ -140,7 +140,7 @@ export const projectNativeInventoryView = (
   const selected = rows.slice(view.offset, view.offset + view.limit);
   return ok({
     ...shared,
-    kind: "native-inventory",
+    kind: "native-inventory" as const,
     view,
     rows: selected.map((record, index) => ({
       source_index: view.offset + index,

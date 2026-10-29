@@ -154,13 +154,13 @@ export const projectEnvironmentCoverageView = (
 ) => {
   const projected = projectEnvironmentStateView(
     parent,
-    { kind: "environment-state", template_rules: view.template_rules },
+    { kind: "environment-state" as const, template_rules: view.template_rules },
     accumulator,
   );
   if (!projected.ok) return projected;
   const state = projected.value;
   return ok({
-    kind: "environment-coverage",
+    kind: "environment-coverage" as const,
     view,
     parent_evidence_id: state.parent_evidence_id,
     parent_operation: state.parent_operation,

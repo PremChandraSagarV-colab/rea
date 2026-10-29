@@ -262,7 +262,7 @@ export const projectGpuCodeObjectsView = (
   };
   if (view.kind === "summary") {
     return ok({
-      kind: "summary",
+      kind: "summary" as const,
       view,
       ...shared,
       summary: { ...summary, limitations: shared.limitations },
@@ -316,7 +316,7 @@ export const projectGpuCodeObjectsView = (
         ),
       );
     return ok({
-      kind: "gpu-code-objects",
+      kind: "gpu-code-objects" as const,
       view,
       ...shared,
       source_coverage: report.coverage,
@@ -328,7 +328,7 @@ export const projectGpuCodeObjectsView = (
         byte_length: artifact.byte_length,
         text,
         offset: view.offset,
-        offset_unit: "utf16-code-unit",
+        offset_unit: "utf16-code-unit" as const,
       },
       coverage: pageViewCoverage(
         view.offset,
@@ -423,7 +423,7 @@ export const projectGpuCodeObjectsView = (
       ),
     );
   return ok({
-    kind: "gpu-code-objects",
+    kind: "gpu-code-objects" as const,
     view,
     ...shared,
     source_coverage: report.coverage,

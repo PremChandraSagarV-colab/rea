@@ -530,7 +530,7 @@ export const projectWebNetworkCaptureView = (
     });
   if (view.kind === "summary")
     return ok({
-      kind: "summary",
+      kind: "summary" as const,
       view,
       ...shared,
       summary: {
@@ -569,7 +569,7 @@ export const projectWebNetworkCaptureView = (
     const projected = projectQlogCapturePage(report.qlog, view);
     return projected.ok
       ? ok({
-          kind: "qlog",
+          kind: "qlog" as const,
           view,
           ...shared,
           ...projected.value,
@@ -582,7 +582,7 @@ export const projectWebNetworkCaptureView = (
   }
   const records = report.records.slice(view.offset, view.offset + view.limit);
   return ok({
-    kind: "capture",
+    kind: "capture" as const,
     view,
     ...shared,
     items: captureViewItemsSchema.parse(

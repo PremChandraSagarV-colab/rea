@@ -275,7 +275,7 @@ export const projectDesktopApplicationView = (
       else group.count++;
     }
     return ok({
-      kind: "summary",
+      kind: "summary" as const,
       view,
       ...shared,
       summary: {
@@ -345,7 +345,7 @@ export const projectDesktopApplicationView = (
           ),
     );
   return ok({
-    kind: "desktop-application",
+    kind: "desktop-application" as const,
     view,
     ...shared,
     source_coverage: report.coverage,

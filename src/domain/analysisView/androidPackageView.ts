@@ -171,7 +171,7 @@ export const projectAndroidPackageView = (
   if (view.kind === "summary") {
     const { text, ...manifest } = report.manifest;
     return ok({
-      kind: "summary",
+      kind: "summary" as const,
       view,
       ...shared,
       summary: {
@@ -179,7 +179,7 @@ export const projectAndroidPackageView = (
         manifest: {
           ...manifest,
           text_code_units: text.length,
-          text_included: false,
+          text_included: false as const,
         },
       },
       coverage: completeWithinViewCoverage(1, 1),
@@ -194,7 +194,7 @@ export const projectAndroidPackageView = (
     );
     if (!page.ok) return page;
     return ok({
-      kind: "android",
+      kind: "android" as const,
       view,
       ...shared,
       item: {
@@ -302,8 +302,8 @@ export const projectAndroidPackageView = (
     }
     const result = {
       ...context,
-      kind: "android",
-      facet: "component-summary",
+      kind: "android" as const,
+      facet: "component-summary" as const,
       view,
       summary,
       coverage: completeWithinViewCoverage(rows.length, rows.length),
@@ -372,8 +372,8 @@ export const projectAndroidPackageView = (
   }
   const result = {
     ...context,
-    kind: "android",
-    facet: "components",
+    kind: "android" as const,
+    facet: "components" as const,
     view,
     items,
     byte_limited,

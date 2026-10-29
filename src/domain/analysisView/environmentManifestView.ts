@@ -185,7 +185,7 @@ export const projectEnvironmentManifestView = (
   const manifest = accumulator.finish();
   if (!manifest.ok) return manifest;
   return ok({
-    kind: "environment-manifest",
+    kind: "environment-manifest" as const,
     view,
     parent_evidence_id: parent.evidenceId,
     parent_operation: capture.operation,

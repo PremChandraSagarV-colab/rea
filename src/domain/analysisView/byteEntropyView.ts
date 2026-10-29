@@ -37,10 +37,10 @@ export const projectByteEntropyView = (
     );
   assertOwnedView<SummaryAnalysisView>(view, "summary");
   return ok({
-    kind: "summary",
+    kind: "summary" as const,
     view,
     parent_evidence_id: parent.evidenceId,
-    parent_operation: "inspect_byte_entropy",
+    parent_operation: "inspect_byte_entropy" as const,
     parent_digest: parent.evidenceId.slice(3),
     artifact: { path: report.artifact.path, sha256: report.artifact.sha256 },
     summary: {
@@ -62,6 +62,6 @@ export const projectByteEntropyView = (
     limitations: [
       ...new Set([...parent.limitations, ...report.limitations]),
     ].sort(),
-    unknowns: [],
+    unknowns: [] as string[],
   });
 };

@@ -119,7 +119,7 @@ export const projectManagedArtifactView = (
     };
     const total = references.length + resources.length + attributes.length;
     return ok({
-      kind: "summary",
+      kind: "summary" as const,
       view,
       ...shared,
       summary: { ...summary, reported_counts, identity_scope },
@@ -129,7 +129,7 @@ export const projectManagedArtifactView = (
   const collection = report[view.collection];
   const item = collection.slice(view.offset, view.offset + view.limit);
   return ok({
-    kind: "managed",
+    kind: "managed" as const,
     view,
     item,
     ...shared,

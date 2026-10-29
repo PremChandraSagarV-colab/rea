@@ -68,10 +68,10 @@ export const projectWebNetworkApiSurfaceView = (
   }
   const page = accumulator.page(view.offset, view.limit);
   return ok({
-    kind: "api-surface",
+    kind: "api-surface" as const,
     view,
     parent_evidence_id: parent.evidenceId,
-    parent_operation: "inspect_web_network_capture",
+    parent_operation: "inspect_web_network_capture" as const,
     parent_digest: parent.evidenceId.slice(3),
     artifact: { path: capture.artifact.path, sha256: capture.artifact.sha256 },
     records: {

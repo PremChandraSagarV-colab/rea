@@ -232,7 +232,7 @@ export const projectModelArtifactView = (
   };
   if (view.kind === "summary")
     return ok({
-      kind: "summary",
+      kind: "summary" as const,
       view,
       ...shared,
       summary: {
@@ -325,7 +325,7 @@ export const projectModelArtifactView = (
     return result;
   });
   return ok({
-    kind: "model-artifact",
+    kind: "model-artifact" as const,
     view,
     ...shared,
     source: report.artifact,

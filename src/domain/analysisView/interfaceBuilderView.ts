@@ -234,7 +234,7 @@ export const projectInterfaceBuilderView = (
   };
   if (view.kind === "summary")
     return ok({
-      kind: "summary",
+      kind: "summary" as const,
       view,
       ...shared,
       ...summarizeInterfaceBuilder(report, limitations.length),
@@ -266,7 +266,7 @@ export const projectInterfaceBuilderView = (
           ? selectDocumentRows(graph.nodes, view, document)
           : selectDocumentRows(graph.edges, view, document);
   return ok({
-    kind: "interface-builder",
+    kind: "interface-builder" as const,
     view,
     items: selected.rows,
     ...shared,

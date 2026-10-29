@@ -288,7 +288,7 @@ export const projectPcapCaptureView = (
   };
   if (view.kind === "summary")
     return ok({
-      kind: "summary",
+      kind: "summary" as const,
       view,
       ...shared,
       summary: summarize(capture),
@@ -307,14 +307,15 @@ export const projectPcapCaptureView = (
     );
     if (!text.ok) return text;
     return ok({
-      kind: "pcap",
+      kind: "pcap" as const,
       view,
       ...shared,
       source_coverage: capture.coverage,
       page: {
-        facet: "diagnostics",
+        facet: "diagnostics" as const,
         text: text.value.item.text,
-        status: value === undefined ? "unknown" : "retained",
+        status:
+          value === undefined ? ("unknown" as const) : ("retained" as const),
       },
       coverage: text.value.coverage,
       unknowns:
@@ -329,7 +330,7 @@ export const projectPcapCaptureView = (
   const selected = selectRows(capture, view);
   return selected.ok
     ? ok({
-        kind: "pcap",
+        kind: "pcap" as const,
         view,
         ...shared,
         source_coverage: capture.coverage,

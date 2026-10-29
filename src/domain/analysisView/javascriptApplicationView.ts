@@ -379,7 +379,7 @@ export const projectJavaScriptApplicationView = (
     const { rows, total } = projectJavaScriptFacts(analysis.graph.nodes, view);
     return ok({
       ...shared,
-      kind: "javascript-facts",
+      kind: "javascript-facts" as const,
       view,
       rows,
       source_coverage: sourceCoverage,
@@ -391,7 +391,7 @@ export const projectJavaScriptApplicationView = (
     const rows = entries.map(moduleReference);
     return ok({
       ...shared,
-      kind: "javascript",
+      kind: "javascript" as const,
       view,
       rows,
       source_coverage: sourceCoverage,
@@ -406,7 +406,7 @@ export const projectJavaScriptApplicationView = (
       0,
     );
     return ok({
-      kind: "summary",
+      kind: "summary" as const,
       view,
       summary: {
         input_path: analysis.input_path,
@@ -451,7 +451,7 @@ export const projectJavaScriptApplicationView = (
     const selected = selectModule(modules, view.selector);
     if (!selected.ok) return selected;
     return ok({
-      kind: "item",
+      kind: "item" as const,
       view,
       item: moduleItem(selected.value.node, selected.value.path),
       coverage: completeCoverage(1, modules.length),
@@ -471,7 +471,7 @@ export const projectJavaScriptApplicationView = (
     path,
   }));
   return ok({
-    kind: "page",
+    kind: "page" as const,
     view,
     items,
     coverage: pageCoverage(view.offset, items.length, total),

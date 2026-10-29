@@ -61,11 +61,11 @@ export const projectFridaSessionStatusView = (
     );
   const { messages, ...status } = report.value;
   return ok({
-    kind: "summary",
+    kind: "summary" as const,
     view,
     parent_evidence_id: parent.evidenceId,
     parent_digest: parent.evidenceId.slice(3),
-    parent_operation: "frida_session_status",
+    parent_operation: "frida_session_status" as const,
     artifact: null,
     source_provider: parent.provider ?? null,
     source_parameters: parameters.data,

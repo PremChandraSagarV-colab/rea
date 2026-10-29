@@ -104,7 +104,19 @@ export const projectAndroidJniView = (
       "unknowns",
     ),
   };
-  let result: Record<string, unknown>;
+  const overBudget = (value: object): boolean =>
+    jsonValueByteLength(value as unknown as JsonValue, 1024 * 1024 - 128) >
+    1024 * 1024 - 128;
+  const budgetError = () =>
+    err(
+      new AnalysisResourceConstraintError(
+        "inspect_analysis_view",
+        "transport",
+        "JNI view exceeds its 1 MiB serialized allowance.",
+        { parent_evidence_id: parent.evidenceId, limit_bytes: 1024 * 1024 },
+        ANALYSIS_VIEW_PAGE_BUDGET_RECOVERY,
+      ),
+    );
   if (view.kind === "summary") {
     const bindings = report.bindings.slice(0, 64);
     const candidateIds = new Set(
@@ -130,9 +142,9 @@ export const projectAndroidJniView = (
       unknown: 0,
     };
     for (const binding of report.bindings) counts[binding.status]++;
-    result = {
+    const summary = {
       ...shared,
-      kind: "summary",
+      kind: "summary" as const,
       view,
       coverage: pageViewCoverage(0, bindings.length, report.bindings.length),
       summary: {
@@ -158,6 +170,8 @@ export const projectAndroidJniView = (
         ),
       },
     };
+    if (overBudget(summary)) return budgetError();
+    return ok(summary);
   } else {
     const indices =
       view.indices === undefined ? undefined : new Set(view.indices);
@@ -246,9 +260,9 @@ export const projectAndroidJniView = (
       library_inventory: report.library_inventory,
       selection: report.selection,
     };
-    result = {
+    const page = {
       ...shared,
-      kind: "android-jni",
+      kind: "android-jni" as const,
       view,
       source,
       items: androidJniViewItemsSchema.parse(selected.rows),
@@ -258,19 +272,7 @@ export const projectAndroidJniView = (
         selected.total,
       ),
     };
+    if (overBudget(page)) return budgetError();
+    return ok(page);
   }
-  if (
-    jsonValueByteLength(result as unknown as JsonValue, 1024 * 1024 - 128) >
-    1024 * 1024 - 128
-  )
-    return err(
-      new AnalysisResourceConstraintError(
-        "inspect_analysis_view",
-        "transport",
-        "JNI view exceeds its 1 MiB serialized allowance.",
-        { parent_evidence_id: parent.evidenceId, limit_bytes: 1024 * 1024 },
-        ANALYSIS_VIEW_PAGE_BUDGET_RECOVERY,
-      ),
-    );
-  return ok(result);
 };

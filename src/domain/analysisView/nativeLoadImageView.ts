@@ -260,7 +260,7 @@ export const projectNativeLoadImageView = (
   if (view.kind === "summary")
     return ok({
       ...shared,
-      kind: "summary",
+      kind: "summary" as const,
       view,
       summary: {
         verification: smallVerification,
@@ -292,7 +292,7 @@ export const projectNativeLoadImageView = (
   const page = selectRows(selected ?? [], view);
   return ok({
     ...shared,
-    kind: "native-load-image",
+    kind: "native-load-image" as const,
     verification_status: report.status,
     view,
     items: nativeLoadImageViewItemsSchema.parse({

@@ -221,7 +221,7 @@ export const projectWebBundleView = (
   if (selected.kind === "summary") {
     const summary = buildSummary();
     const result = {
-      kind: "summary",
+      kind: "summary" as const,
       view: selected,
       ...shared,
       summary,
@@ -239,7 +239,7 @@ export const projectWebBundleView = (
   if (view.collection === "summary") {
     const summary = buildSummary();
     const result = {
-      kind: "web-bundle",
+      kind: "web-bundle" as const,
       view,
       ...shared,
       completeness: report.completeness,

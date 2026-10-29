@@ -183,7 +183,7 @@ export const projectRustBinaryView = (
   const summary = summarize(report);
   if (view.kind === "summary")
     return ok({
-      kind: "summary",
+      kind: "summary" as const,
       view,
       ...shared,
       summary,
@@ -220,11 +220,11 @@ export const projectRustBinaryView = (
       }),
     );
     return ok({
-      kind: "rust",
+      kind: "rust" as const,
       view,
       ...shared,
       rust: summary,
-      page: { collection: "packages", rows: selected.rows },
+      page: { collection: "packages" as const, rows: selected.rows },
       coverage: pageViewCoverage(
         view.offset,
         selected.rows.length,
@@ -252,11 +252,11 @@ export const projectRustBinaryView = (
     }),
   );
   return ok({
-    kind: "rust",
+    kind: "rust" as const,
     view,
     ...shared,
     rust: summary,
-    page: { collection: "edges", rows: selected.rows },
+    page: { collection: "edges" as const, rows: selected.rows },
     coverage: pageViewCoverage(
       view.offset,
       selected.rows.length,

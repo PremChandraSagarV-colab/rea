@@ -319,7 +319,7 @@ export const projectArtifactInventoryView = (
       inventory.occurrences.length +
       inventory.edges.length;
     return ok({
-      kind: "summary",
+      kind: "summary" as const,
       view,
       summary: {
         manifest: inventory.manifest,
@@ -376,7 +376,7 @@ export const projectArtifactInventoryView = (
                 : inventory.integrityContradictions.length,
           };
   return ok({
-    kind: "inventory",
+    kind: "inventory" as const,
     view,
     manifest: inventory.manifest,
     inventory_evidence_ids: [...evidenceIds],

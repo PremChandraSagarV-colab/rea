@@ -156,7 +156,7 @@ export const projectSourceToBundleView = (
   };
   if (view.kind === "summary")
     return ok({
-      kind: "summary",
+      kind: "summary" as const,
       view,
       ...shared,
       summary: context,
@@ -237,7 +237,7 @@ export const projectSourceToBundleView = (
     }
   }
   return ok({
-    kind: "source-to-bundle",
+    kind: "source-to-bundle" as const,
     view,
     ...shared,
     ...context,

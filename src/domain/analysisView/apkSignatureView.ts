@@ -301,7 +301,7 @@ export const projectApkSignatureView = (
   };
   if (view.kind === "summary")
     return ok({
-      kind: "summary",
+      kind: "summary" as const,
       view,
       ...shared,
       summary,
@@ -328,7 +328,7 @@ export const projectApkSignatureView = (
     items.push(item);
   }
   return ok({
-    kind: "apk-signature",
+    kind: "apk-signature" as const,
     view,
     ...shared,
     source_coverage: summary.source_coverage,

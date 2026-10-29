@@ -218,7 +218,7 @@ export const projectErlangBeamView = (
   if (view.kind === "summary")
     return ok({
       ...shared,
-      kind: "summary",
+      kind: "summary" as const,
       view,
       summary,
       coverage: completeWithinViewCoverage(chunks.length, chunks.length),
@@ -226,7 +226,7 @@ export const projectErlangBeamView = (
   const selected = selectRows(parsed.value[view.collection], view);
   return ok({
     ...shared,
-    kind: "beam",
+    kind: "beam" as const,
     view,
     beam: summary,
     page: { collection: view.collection, items: selected.rows },

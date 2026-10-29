@@ -272,59 +272,83 @@ const parentArtifactPath = (parent: AnalysisViewParent): string => {
   return parent.evidenceId;
 };
 
+/** Check a projector result against the result union before sealing it. */
+const sealProjected = (
+  projected: Result<UnsignedAnalysisView, AnalysisError>,
+): Result<AnalysisViewResult, AnalysisError> =>
+  projected.ok ? ok(sealAnalysisView(projected.value)) : projected;
+
 /** Named source owners for views that need no extra decoder or accumulator. */
 type RetainedViewProjector = (
   parent: AnalysisViewParent,
   view: AnalysisViewRequest,
-) => Result<unknown, AnalysisError>;
+) => Result<UnsignedAnalysisView, AnalysisError>;
+
+/** Register a projector whose inferred result must be in the result union. */
+const retain = (
+  operation: string,
+  project: RetainedViewProjector,
+): readonly [string, RetainedViewProjector] => [operation, project];
+
+/**
+ * IL2CPP and Android symbol tests pass fresh rows with fields outside
+ * AdmittedView. The request schema already admitted the view; only the
+ * result is checked here.
+ */
+const retainRecord = (
+  operation: string,
+  project: (
+    parent: AnalysisViewParent,
+    view: { readonly kind: string } & Record<string, unknown>,
+  ) => Result<UnsignedAnalysisView, AnalysisError>,
+): readonly [string, RetainedViewProjector] => [
+  operation,
+  (parent, view) =>
+    project(
+      parent,
+      view as { readonly kind: string } & Record<string, unknown>,
+    ),
+];
+
 const retainedViewProjectors = new Map<string, RetainedViewProjector>([
-  ...NATIVE_OBSERVATION_OPERATIONS.map(
-    (operation) => [operation, projectNativeObservationView] as const,
+  ...NATIVE_OBSERVATION_OPERATIONS.map((operation) =>
+    retain(operation, projectNativeObservationView),
   ),
-  ["inspect_erlang_beam", projectErlangBeamView],
-  ["inspect_devicetree", projectDevicetreeView],
-  ["inspect_native_exports", projectNativeExportsView],
-  ["inspect_native_load_image", projectNativeLoadImageView],
-  ["inspect_python_pyc", projectPythonPycView],
-  ["frida_session_status", projectFridaSessionStatusView],
-  ["gdb_console", projectCommandObservationView],
-  ["inspect_with_objdump", projectCommandObservationView],
-  ["inspect_go_binary", projectGoBinaryView],
-  ["inspect_rust_binary", projectRustBinaryView],
-  ...NATIVE_INVENTORY_OPERATIONS.map(
-    (operation) => [operation, projectNativeInventoryView] as const,
+  retain("inspect_erlang_beam", projectErlangBeamView),
+  retain("inspect_devicetree", projectDevicetreeView),
+  retain("inspect_native_exports", projectNativeExportsView),
+  retain("inspect_native_load_image", projectNativeLoadImageView),
+  retain("inspect_python_pyc", projectPythonPycView),
+  retain("frida_session_status", projectFridaSessionStatusView),
+  retain("gdb_console", projectCommandObservationView),
+  retain("inspect_with_objdump", projectCommandObservationView),
+  retain("inspect_go_binary", projectGoBinaryView),
+  retain("inspect_rust_binary", projectRustBinaryView),
+  ...NATIVE_INVENTORY_OPERATIONS.map((operation) =>
+    retain(operation, projectNativeInventoryView),
   ),
-  ["inspect_desktop_application", projectDesktopApplicationView],
-  ["inspect_wasm_artifact", projectWasmArtifactView],
-  ["inspect_macho", projectMachoView],
-  ["decode_interface_builder", projectInterfaceBuilderView],
-  ["inspect_evm_interface", projectEvmInterfaceView],
-  ["inspect_managed_artifact", projectManagedArtifactView],
-  ["inspect_managed_members", projectManagedMemberView],
-  ["inspect_android_package", projectAndroidPackageView],
-  [
-    "inspect_android_class",
-    projectAndroidSymbolSummary as RetainedViewProjector,
-  ],
-  [
-    "inspect_android_method",
-    projectAndroidSymbolSummary as RetainedViewProjector,
-  ],
-  ["inspect_android_jni_bindings", projectAndroidJniView],
-  ["capture_browser_scenario", projectBrowserScenarioView],
-  ["inspect_dart_aot", projectDartAotView],
-  [
-    "inspect_il2cpp_metadata",
-    projectIl2cppMetadataView as RetainedViewProjector,
-  ],
-  ["inspect_apk_signature", projectApkSignatureView],
-  ["inspect_model_artifact", projectModelArtifactView],
-  ["inspect_gpu_code_objects", projectGpuCodeObjectsView],
-  ["match_native_functions", projectNativeFunctionMatchingView],
-  ["compare_source_to_bundle", projectSourceToBundleView],
-  ["inspect_artifact", projectArtifactInventoryView],
-  ["inventory_artifact", projectArtifactInventoryView],
-  ["analyze_web_bundle", projectWebBundleView],
+  retain("inspect_desktop_application", projectDesktopApplicationView),
+  retain("inspect_wasm_artifact", projectWasmArtifactView),
+  retain("inspect_macho", projectMachoView),
+  retain("decode_interface_builder", projectInterfaceBuilderView),
+  retain("inspect_evm_interface", projectEvmInterfaceView),
+  retain("inspect_managed_artifact", projectManagedArtifactView),
+  retain("inspect_managed_members", projectManagedMemberView),
+  retain("inspect_android_package", projectAndroidPackageView),
+  retainRecord("inspect_android_class", projectAndroidSymbolSummary),
+  retainRecord("inspect_android_method", projectAndroidSymbolSummary),
+  retain("inspect_android_jni_bindings", projectAndroidJniView),
+  retain("capture_browser_scenario", projectBrowserScenarioView),
+  retain("inspect_dart_aot", projectDartAotView),
+  retainRecord("inspect_il2cpp_metadata", projectIl2cppMetadataView),
+  retain("inspect_apk_signature", projectApkSignatureView),
+  retain("inspect_model_artifact", projectModelArtifactView),
+  retain("inspect_gpu_code_objects", projectGpuCodeObjectsView),
+  retain("match_native_functions", projectNativeFunctionMatchingView),
+  retain("compare_source_to_bundle", projectSourceToBundleView),
+  retain("inspect_artifact", projectArtifactInventoryView),
+  retain("inventory_artifact", projectArtifactInventoryView),
+  retain("analyze_web_bundle", projectWebBundleView),
 ]);
 
 /** Budgets retained across source admission and the selected grouping projection. */
@@ -386,7 +410,7 @@ const projectGroupingView = (
   parent: AnalysisViewParent,
   view: GroupingViewRequest,
   accumulators: AnalysisViewAccumulators,
-): Result<unknown, AnalysisError> => {
+) => {
   if (view.kind === "api-surface")
     return projectWebNetworkApiSurfaceView(
       parent,
@@ -419,41 +443,29 @@ export const projectAnalysisView = (
     );
   if (view.kind === "javascript-routes") {
     const projected = projectJavaScriptRoutesView(parent, view);
-    return projected.ok
-      ? ok(sealAnalysisView(projected.value as UnsignedAnalysisView))
-      : projected;
+    return sealProjected(projected);
   }
   if (view.kind === "web-bundle") {
     const projected = projectWebBundleView(parent, view);
-    return projected.ok
-      ? ok(sealAnalysisView(projected.value as UnsignedAnalysisView))
-      : projected;
+    return sealProjected(projected);
   }
   if (isGroupingView(view)) {
     const grouped = projectGroupingView(parent, view, accumulators);
-    return grouped.ok
-      ? ok(sealAnalysisView(grouped.value as UnsignedAnalysisView))
-      : grouped;
+    return sealProjected(grouped);
   }
   if (parent.operation === "inspect_web_network_capture") {
     const projected = projectWebNetworkCaptureView(parent, view);
-    return projected.ok
-      ? ok(sealAnalysisView(projected.value as UnsignedAnalysisView))
-      : projected;
+    return sealProjected(projected);
   }
   if (parent.operation === "inspect_pcap_capture") {
     const projected = projectPcapCaptureView(parent, view);
-    return projected.ok
-      ? ok(sealAnalysisView(projected.value as UnsignedAnalysisView))
-      : projected;
+    return sealProjected(projected);
   }
   if (parent.operation === "inspect_byte_entropy") {
     const report = parseAnalysisViewResult(byteEntropySchema, parent);
     if (!report.ok) return report;
     const projected = projectByteEntropyView(parent, report.value, view);
-    return projected.ok
-      ? ok(sealAnalysisView(projected.value as UnsignedAnalysisView))
-      : projected;
+    return sealProjected(projected);
   }
   if (parent.operation === "inspect_binary_layout") {
     const layout = parseAnalysisViewResult(
@@ -462,9 +474,7 @@ export const projectAnalysisView = (
     );
     if (!layout.ok) return layout;
     const projected = projectBinaryLayoutView(parent, layout.value, view);
-    return projected.ok
-      ? ok(sealAnalysisView(projected.value as UnsignedAnalysisView))
-      : projected;
+    return sealProjected(projected);
   }
   if (parent.operation === "analyze_javascript_application") {
     const analysis = parseJavaScriptParent(parent.normalizedResult);
@@ -474,24 +484,18 @@ export const projectAnalysisView = (
       analysis.value,
       view,
     );
-    return projected.ok
-      ? ok(sealAnalysisView(projected.value as UnsignedAnalysisView))
-      : projected;
+    return sealProjected(projected);
   }
   if (parent.operation === "analyze_function") {
     const native = parseAnalysisViewResult(functionDossierSchema, parent);
     if (!native.ok) return native;
     const projected = projectNativeFunctionView(parent, native.value, view);
-    return projected.ok
-      ? ok(sealAnalysisView(projected.value as UnsignedAnalysisView))
-      : projected;
+    return sealProjected(projected);
   }
   const project = retainedViewProjectors.get(parent.operation);
   if (project !== undefined) {
     const projected = project(parent, view);
-    return projected.ok
-      ? ok(sealAnalysisView(projected.value as UnsignedAnalysisView))
-      : projected;
+    return sealProjected(projected);
   }
   return err(unsupportedParent(parent));
 };

@@ -575,7 +575,7 @@ export const projectEnvironmentStateView = (
   const state = accumulator.finishState();
   if (!state.ok) return state;
   return ok({
-    kind: "environment-state",
+    kind: "environment-state" as const,
     view,
     parent_evidence_id: parent.evidenceId,
     parent_operation: grouped.value.operation,
