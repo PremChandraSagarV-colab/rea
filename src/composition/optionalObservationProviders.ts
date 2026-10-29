@@ -13,6 +13,7 @@ import {
 } from "../browser/providerIdentities.js";
 import { V8_INSPECTOR_PROVIDER_IDENTITY } from "../inspector/providerIdentity.js";
 import type { V8InspectorAdmission } from "../inspector/V8InspectorProvider.js";
+import type { WebBundleAnalysisAdmission } from "../browser/IsolatedWebBundleAnalyzer.js";
 import { err, ok, type Result } from "../domain/result.js";
 
 /** Precisely typed startup factories for the five existing observation ports. */
@@ -29,11 +30,15 @@ export const createOptionalObservationFactories = (
 ): OptionalObservationFactories => {
   const environment = snapshotEnvironment(selectedEnvironment);
   let runtimeAdmission: V8InspectorAdmission | undefined;
+  let webBundleAdmission: WebBundleAnalysisAdmission | undefined;
   return {
-    browserObservation: async () =>
-      (
-        await import("./browserObservation.js")
-      ).createBrowserObservationProvider(),
+    browserObservation: async () => {
+      const browser = await import("./browserObservation.js");
+      const { WebBundleAnalysisAdmission: Admission } =
+        await import("../browser/IsolatedWebBundleAnalyzer.js");
+      webBundleAdmission ??= new Admission();
+      return browser.createBrowserObservationProvider(webBundleAdmission);
+    },
     browserScenarioCapture: async () =>
       (await import("./browserScenario.js")).createBrowserScenarioProvider(
         environment,

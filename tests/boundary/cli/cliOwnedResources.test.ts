@@ -31,16 +31,20 @@ it("does not share a JavaScript worker scope or its in-flight close", async () =
   };
   const first = new CliJavaScriptAnalysisHost();
   const second = new CliJavaScriptAnalysisHost();
+  let firstClose: Promise<void> | undefined;
+  let secondClose: Promise<void> | undefined;
   const firstScope = first.scope();
   const secondScope = second.scope();
-  expect(firstScope).not.toBe(secondScope);
-  const firstClose = first.close();
-  expect(first.close()).toBe(firstClose);
-  const secondClose = second.close();
-  expect(secondClose).not.toBe(firstClose);
-  release();
-  await firstClose;
-  await secondClose;
+  try {
+    expect(firstScope).not.toBe(secondScope);
+    firstClose = first.close();
+    expect(first.close()).toBe(firstClose);
+    secondClose = second.close();
+    expect(secondClose).not.toBe(firstClose);
+  } finally {
+    release();
+    await Promise.allSettled([firstClose, secondClose]);
+  }
   expect(first.scope()).not.toBe(firstScope);
   expect(second.scope()).not.toBe(secondScope);
 });

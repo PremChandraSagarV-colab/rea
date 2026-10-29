@@ -15,6 +15,7 @@ import { analyzeWebBundleInputSchema } from "../domain/webBundleAnalysis.js";
 import { analyzeCapturedWebScript } from "../domain/webBundleAnalyzer.js";
 import { ProviderCleanupError } from "../domain/providerCleanupError.js";
 import { projectAnalysisError } from "../domain/analysisErrorProjection.js";
+import { OwnedWorkerRuntime } from "../process/OwnedWorkerRuntime.js";
 import { err, ok } from "../domain/result.js";
 import {
   IsolatedWebBundleAnalyzer,
@@ -358,6 +359,28 @@ it("shares one capture reservation when analyzers use one admission", async () =
   first.releaseReservation();
   expect((await second.reserve()).ok).toBe(true);
   second.releaseReservation();
+});
+
+it("does not fail one admission when another host's worker runtime is retained", async () => {
+  let fail = true;
+  const stuck = new OwnedWorkerRuntime({
+    rootPrefix: "rea-web-host-isolation-",
+    retryCleanup: async () => {
+      if (fail) throw new Error("other host still owns its worker");
+    },
+  });
+  stuck.retainForCleanup();
+  try {
+    const analyzer = new IsolatedWebBundleAnalyzer(() => inertWorker());
+    expect((await analyzer.reserve()).ok).toBe(true);
+    analyzer.releaseReservation();
+    await expect(OwnedWorkerRuntime.retryPending()).rejects.toThrow(
+      "other host still owns its worker",
+    );
+  } finally {
+    fail = false;
+    await stuck.close();
+  }
 });
 
 it("does not share a capture reservation across independent admissions", async () => {

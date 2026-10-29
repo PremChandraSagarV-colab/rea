@@ -32,8 +32,8 @@ import {
 } from "../browser/CdpScriptContextFacts.js";
 import type { CdpConnection, CdpEvent } from "../browser/CdpConnection.js";
 import {
+  ElectronFileScope,
   mapElectronFileAuthorizationFailure,
-  retryElectronFileCleanup,
 } from "../browser/ElectronFileScope.js";
 import {
   CdpTargetSessionOwner,
@@ -64,6 +64,7 @@ import { V8_INSPECTOR_PROVIDER_IDENTITY } from "./providerIdentity.js";
  * without a process-global counter.
  */
 export class V8InspectorAdmission {
+  readonly files = new ElectronFileScope();
   readonly connections = new CdpTargetSessionOwner();
   #activeOperations = 0;
   #closing = false;
@@ -120,7 +121,7 @@ export class V8InspectorAdmission {
         failures.push(providerError(cause, "observe_javascript_runtime"));
       }
       try {
-        await retryElectronFileCleanup();
+        await this.files.retryCleanup();
       } catch (cause: unknown) {
         failures.push(providerError(cause, "observe_javascript_runtime"));
       }
@@ -235,7 +236,7 @@ export class V8InspectorProvider implements JavaScriptRuntimeObservationPort {
         options.signal,
         "list_javascript_runtime_targets",
       );
-      await retryElectronFileCleanup();
+      await this.#admission.files.retryCleanup();
       discovery = await discoverV8Inspector(
         input.inspector_endpoint,
         "list_javascript_runtime_targets",
@@ -252,6 +253,7 @@ export class V8InspectorProvider implements JavaScriptRuntimeObservationPort {
           options.signal,
           "list_javascript_runtime_targets",
           this.#asarHeaderAdmission,
+          this.#admission.files,
         );
         if (!decision.allowed) {
           excluded[inspectorExclusionKey(decision.reason)] += 1;
@@ -374,7 +376,7 @@ export class V8InspectorProvider implements JavaScriptRuntimeObservationPort {
     try {
       throwIfRuntimeObservationCancelled(options.signal);
       await this.#admission.connections.retryPending();
-      await retryElectronFileCleanup();
+      await this.#admission.files.retryCleanup();
       discovery = await discoverV8Inspector(
         input.inspector_endpoint,
         "observe_javascript_runtime",
@@ -385,6 +387,7 @@ export class V8InspectorProvider implements JavaScriptRuntimeObservationPort {
         input,
         this.#asarHeaderAdmission,
         options.signal,
+        this.#admission.files,
       );
       if (input.runtime_kind !== undefined)
         assertRuntimeKind(target, input.runtime_kind);
@@ -420,6 +423,7 @@ export class V8InspectorProvider implements JavaScriptRuntimeObservationPort {
             signal,
             "observe_javascript_runtime",
             this.#asarHeaderAdmission,
+            this.#admission.files,
           ),
         ...(options.signal === undefined ? {} : { signal: options.signal }),
       });
@@ -526,6 +530,7 @@ const authorizedTarget = async (
   input: ObserveJavaScriptRuntimeInput,
   asarHeaderAdmission: AsarHeaderAdmission,
   signal?: AbortSignal,
+  files?: ElectronFileScope,
 ): Promise<AuthorizedV8InspectorTarget> => {
   throwIfRuntimeObservationCancelled(signal);
   const target = selectCdpDiscoveryTarget(
@@ -545,6 +550,7 @@ const authorizedTarget = async (
     signal,
     "observe_javascript_runtime",
     asarHeaderAdmission,
+    files,
   );
   throwIfRuntimeObservationCancelled(signal);
   if (target.attached === true)
