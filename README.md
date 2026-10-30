@@ -9,7 +9,7 @@
 
 ## Personal fork extension
 
-This fork adds an [REA Workbench](workbench/README.md) dashboard with local Chrome inspection, browser and app-analysis workflows, robots-aware web and RSS/Atom feed scraping, public GitHub repository exploration, read-only Gmail message and attachment extraction, and YouTube video/channel metadata collection. Its Render Blueprint uses the free web-service plan; configure service credentials before enabling Google connectors or deploying it.
+This fork adds an [REA Workbench](workbench/README.md) dashboard with a local Codex CLI build-task runner, local Chrome inspection, browser and app-analysis workflows, robots-aware web and RSS/Atom feed scraping, public GitHub repository exploration, read-only Gmail message and attachment extraction, and YouTube video/channel metadata collection. Its Render Blueprint uses the free web-service plan; configure service credentials before enabling Google connectors or deploying it. The local coding runner stays disabled on hosted instances, which cannot access your PC.
 
 **See a feature you like. Understand how it works, down to the binary level.**
 

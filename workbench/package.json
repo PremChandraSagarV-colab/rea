@@ -8,6 +8,7 @@
   },
   "scripts": {
     "start": "node server.mjs",
+    "local": "node local.mjs",
     "test": "node smoke-check.mjs"
   },
   "dependencies": {

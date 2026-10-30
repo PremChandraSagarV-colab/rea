@@ -13,6 +13,10 @@ node server.mjs
 
 Edit `.env` with your values. Open `http://localhost:3000`. The dashboard can run without configuring Gmail or YouTube; those connectors become available when their credentials are set. To use REA analysis commands, return to the repository root, install its dependencies, and run `npm run build:cached`. REA's native and browser analysis runs on the same machine as its CLI; the web dashboard does not grant a hosted Render service access to your local files or desktop.
 
+### Run build tasks with Codex
+
+Install and sign in to the Codex CLI on your PC, then run `npm run local` from `workbench/` and open `http://localhost:3000`. This enables **Build task agent** and runs prompts through `codex exec` with `workspace-write` sandboxing and Codex automatic approval review. By default, the workspace is the REA repository root; set `LOCAL_AGENT_WORKSPACE` to a different project path before starting the server to choose another folder. One task runs at a time, is limited to 30 minutes, and its output stays in memory until the server restarts. The task runner is disabled in production and the server binds to loopback locally. It can edit the selected workspace and run project commands; review its changes. Logins, secrets, external publishing, and production deployments may require you to complete a separate approval or account step. This is a coding agent built around the Codex CLI, not the REA reverse-engineering MCP product.
+
 Run `npm test` in `workbench/` for a mock-provider integration check of Gmail search/body/attachment routes and YouTube search/video/channel collection.
 
 ### Chrome inspection
@@ -49,7 +53,7 @@ Google OAuth consent-screen verification and user eligibility are controlled by 
 
 ## Render
 
-The repository's `render.yaml` deploys this workbench as a Render web service without building REA on the hosted instance. It uses Render's free compute plan; free services spin down after 15 minutes idle, and in-memory Gmail sessions end when the process stops. Set all `sync: false` environment variables in the Render dashboard. Use a unique long `WORKBENCH_PASSWORD`, then set `GOOGLE_REDIRECT_URI` to `https://YOUR-SERVICE.onrender.com/auth/google/callback` and add the same URL to the Google OAuth client. Set `YOUTUBE_API_KEY` to enable YouTube search. Keep secrets in Render's environment settings; never commit them. Render prompts for `sync: false` values during initial Blueprint creation; update secrets for an existing service in its dashboard.
+The repository's `render.yaml` deploys this workbench as a Render web service without building REA on the hosted instance. It uses Render's free compute plan; free services spin down after 15 minutes idle, and in-memory Gmail sessions end when the process stops. Set all `sync: false` environment variables in the Render dashboard. Use a unique long `WORKBENCH_PASSWORD`, then set `GOOGLE_REDIRECT_URI` to `https://YOUR-SERVICE.onrender.com/auth/google/callback` and add the same URL to the Google OAuth client. Set `YOUTUBE_API_KEY` to enable YouTube search. Keep secrets in Render's environment settings; never commit them. Render prompts for `sync: false` values during initial Blueprint creation; update secrets for an existing service in its dashboard. The password gate uses HTTP Basic Authentication and ignores the username, so enter any username (for example `rea`) with the password. If you forget the password, replace `WORKBENCH_PASSWORD` in the service's Render Environment settings and redeploy. The local Codex task runner is disabled in production by design; the hosted service cannot take over your PC.
 
 When deployed, submitted page URLs are fetched by the Render host. Gmail message text is retrieved on request and selected attachments are streamed through the host; do not deploy or connect accounts unless you accept that data flow. REA analysis of local binaries, desktop apps, or local Chrome targets remains on the local machine.
 

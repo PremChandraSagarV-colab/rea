@@ -37,6 +37,36 @@ function downloadJson(filename, value) {
 function showMessage(container, text, className = "empty") {
   container.replaceChildren(Object.assign(document.createElement("p"), { className, textContent: text }));
 }
+let activeAgentTaskId = null;
+async function refreshAgentStatus() {
+  try {
+    const response = await fetch("/api/local-agent/status"); const data = await response.json();
+    const running = data.activeTask?.status === "running";
+    activeAgentTaskId = running ? data.activeTask.id : null;
+    $("#agent-status").textContent = data.enabled ? running ? "Codex task running" : "Local runner ready" : "Local runner only";
+    $("#agent-status").className = `count ${data.enabled ? "agent-ready" : ""}`;
+    $("#agent-workspace").textContent = data.enabled ? `Workspace · ${data.workspace}` : "Local workspace not connected";
+    $("#agent-help").textContent = data.enabled ? "Describe the finished result you want. Codex can edit files and run project commands in this local workspace; browser sign-in, publishing, and deployment may still need your action." : "Open the project on your PC and start the local runner with npm run local. The hosted Render service cannot run commands on your computer.";
+    $("#agent-run").disabled = !data.enabled || running;
+    $("#agent-stop").disabled = !running;
+    const task = data.activeTask ?? data.tasks?.[0];
+    $("#agent-output").textContent = task ? `Task ${task.status}${task.exitCode !== null && task.exitCode !== undefined ? ` · exit ${task.exitCode}` : ""}\n\n${task.output || "Waiting for Codex output…"}` : "No local task is running.";
+  } catch { $("#agent-status").textContent = "Runner unavailable"; $("#agent-help").textContent = "The local runner API is unavailable."; }
+}
+$("#agent-form").addEventListener("submit", async (event) => {
+  event.preventDefault(); const button = $("#agent-run"); button.disabled = true;
+  try {
+    const response = await fetch("/api/local-agent/tasks", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ prompt: $("#agent-prompt").value.trim() }) });
+    const data = await response.json(); if (!response.ok) throw new Error(data.error ?? "Could not start build task");
+    toast("Codex task started"); await refreshAgentStatus();
+  } catch (error) { toast(error.message); button.disabled = false; }
+});
+$("#agent-stop").addEventListener("click", async () => {
+  if (!activeAgentTaskId) return;
+  try { await fetch(`/api/local-agent/tasks/${encodeURIComponent(activeAgentTaskId)}/cancel`, { method: "POST" }); await refreshAgentStatus(); }
+  catch (error) { toast(error.message); }
+});
+refreshAgentStatus(); setInterval(refreshAgentStatus, 1500);
 function renderScrapeResults(container, items, filename = "web-scrape-results.json") {
   latestScrape = items; container.replaceChildren();
   const exportButton = Object.assign(document.createElement("button"), { className: "copy export-button", textContent: "Download JSON" });

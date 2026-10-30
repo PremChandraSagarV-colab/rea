@@ -1,4 +1,5 @@
 import { createServer } from "node:http";
+import { spawn } from "node:child_process";
 import { readFile } from "node:fs/promises";
 import { randomBytes, timingSafeEqual } from "node:crypto";
 import { lookup } from "node:dns/promises";
@@ -14,6 +15,8 @@ const root = dirname(fileURLToPath(import.meta.url));
 const port = Number(process.env.PORT ?? 3000);
 const production = process.env.NODE_ENV === "production";
 const sessions = new Map();
+const localAgentTasks = new Map();
+let activeLocalAgentTask = null;
 const sessionCookie = "rea_session";
 const sessionTtlMs = 24 * 60 * 60 * 1000;
 
@@ -75,6 +78,69 @@ function auth(req, res) {
 
 function cookieOptions(value, maxAge) {
   return `${sessionCookie}=${encodeURIComponent(value)}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${maxAge}${production ? "; Secure" : ""}`;
+}
+
+function localAgentEnabled() {
+  return !production && process.env.LOCAL_AGENT_ENABLED === "true";
+}
+
+function appendTaskLog(task, text) {
+  if (!text) return;
+  task.output = `${task.output}${text}`.slice(-80_000);
+  task.updatedAt = new Date().toISOString();
+}
+
+function startLocalAgentTask(prompt) {
+  const task = { id: randomBytes(12).toString("hex"), prompt, status: "queued", output: "", createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(), exitCode: null };
+  localAgentTasks.set(task.id, task);
+  activeLocalAgentTask = task.id;
+  task.status = "running";
+  const workspace = process.env.LOCAL_AGENT_WORKSPACE || dirname(root);
+  const executable = process.env.CODEX_CLI_PATH || "codex";
+  const safeEnv = Object.fromEntries(Object.entries(process.env).filter(([name]) => !/(?:PASSWORD|SECRET|TOKEN|API_KEY|CLIENT_ID|CREDENTIAL)/i.test(name)));
+  const taskPrompt = `You are Codex running locally for the user. Work in the configured project workspace until the requested deliverable is implemented and verified. Inspect the existing project before changing it. Use the project's established conventions and run relevant checks. Never read, print, or transmit .env files, credentials, auth stores, or secret values; do not bypass authentication, CAPTCHAs, paywalls, or site access controls. Do not send email, publish externally, create public repositories, or deploy unless the user's task explicitly names and authorizes that specific action. If a requested action needs a password, API key, OAuth consent, CAPTCHA, or consequential external approval, stop at that step and tell the user exactly what to complete. For local browser automation, only use an explicitly configured loopback Chrome DevTools endpoint such as http://127.0.0.1:9222; never probe other machines or network ranges.\n\nUSER TASK:\n${prompt}`;
+  let child;
+  try {
+    child = spawn(executable, ["exec", "--cd", workspace, "--model", process.env.CODEX_MODEL || "gpt-6-luna", "--approve-for-me", "--json", "-"], { cwd: workspace, env: safeEnv, windowsHide: true, stdio: ["pipe", "pipe", "pipe"] });
+  } catch (error) {
+    task.status = "failed";
+    appendTaskLog(task, `Could not start Codex CLI: ${error.message}\n`);
+    activeLocalAgentTask = null;
+    return task;
+  }
+  task.pid = child.pid ?? null;
+  task.child = child;
+  let stdoutBuffer = "";
+  child.stdout.on("data", (chunk) => {
+    stdoutBuffer += chunk.toString("utf8");
+    const lines = stdoutBuffer.split(/\r?\n/); stdoutBuffer = lines.pop() ?? "";
+    for (const line of lines) {
+      if (!line.trim()) continue;
+      try {
+        const event = JSON.parse(line);
+        if (event.type === "item.completed" && event.item?.type === "agent_message") appendTaskLog(task, `${event.item.text ?? ""}\n`);
+        else if (event.type === "turn.started") appendTaskLog(task, "Codex started a new turn.\n");
+        else if (event.type === "turn.completed") appendTaskLog(task, "Codex completed the task turn.\n");
+        else if (event.type === "turn.failed" || event.type === "error") appendTaskLog(task, `${event.message ?? event.error?.message ?? "Codex reported an error."}\n`);
+      } catch { appendTaskLog(task, `${line}\n`); }
+    }
+  });
+  child.stderr.on("data", (chunk) => appendTaskLog(task, chunk.toString("utf8")));
+  child.on("error", (error) => {
+    task.status = "failed"; appendTaskLog(task, `Could not run Codex CLI: ${error.message}\n`);
+    if (activeLocalAgentTask === task.id) activeLocalAgentTask = null;
+  });
+  const timeout = setTimeout(() => { if (task.status === "running") { task.status = "timed_out"; appendTaskLog(task, "Local agent reached the 30-minute limit and was stopped.\n"); child.kill(); } }, 30 * 60 * 1000);
+  timeout.unref();
+  child.on("close", (code, signal) => {
+    clearTimeout(timeout);
+    task.exitCode = code;
+    if (task.status === "running") task.status = code === 0 ? "completed" : "failed";
+    if (signal) appendTaskLog(task, `Codex exited on signal ${signal}.\n`);
+    if (activeLocalAgentTask === task.id) activeLocalAgentTask = null;
+  });
+  child.stdin.end(taskPrompt);
+  return task;
 }
 
 function getSession(req) {
@@ -492,6 +558,32 @@ export const server = createServer(async (req, res) => {
     }
     if (req.method === "GET" && url.pathname === "/healthz") return send(res, 200, "ok", "text/plain; charset=utf-8");
     if (!auth(req, res)) return;
+
+    if (req.method === "GET" && url.pathname === "/api/local-agent/status") {
+      const active = activeLocalAgentTask ? localAgentTasks.get(activeLocalAgentTask) : null;
+      return send(res, 200, { enabled: localAgentEnabled(), workspace: localAgentEnabled() ? process.env.LOCAL_AGENT_WORKSPACE || dirname(root) : null, activeTask: active ? { id: active.id, status: active.status, output: active.output, createdAt: active.createdAt, updatedAt: active.updatedAt } : null, tasks: [...localAgentTasks.values()].slice(-10).reverse().map(({ id, status, output, createdAt, updatedAt, exitCode }) => ({ id, status, output, createdAt, updatedAt, exitCode })) });
+    }
+    if (req.method === "POST" && url.pathname === "/api/local-agent/tasks") {
+      if (!localAgentEnabled()) return send(res, 503, { error: "The task runner is local-only. Start this workbench on your computer with LOCAL_AGENT_ENABLED=true." });
+      const origin = req.headers.origin;
+      if (!origin || new URL(origin).host !== req.headers.host || !["localhost", "127.0.0.1"].includes(new URL(origin).hostname)) return send(res, 403, { error: "A same-origin local workbench request is required." });
+      if (activeLocalAgentTask) return send(res, 409, { error: "One local task is already running. Stop it or wait for it to finish." });
+      const input = await readJson(req);
+      if (typeof input.prompt !== "string" || !input.prompt.trim() || input.prompt.length > 20_000) return send(res, 400, { error: "Enter a task prompt up to 20,000 characters." });
+      for (const [id, task] of localAgentTasks) if (task.status !== "running" && localAgentTasks.size > 20) localAgentTasks.delete(id);
+      const task = startLocalAgentTask(input.prompt.trim());
+      return send(res, 202, { task: { id: task.id, status: task.status, output: task.output, createdAt: task.createdAt, updatedAt: task.updatedAt } });
+    }
+    const localTaskCancel = /^\/api\/local-agent\/tasks\/([a-f0-9]{24})\/cancel$/.exec(url.pathname);
+    if (req.method === "POST" && localTaskCancel) {
+      if (!localAgentEnabled()) return send(res, 503, { error: "The task runner is local-only." });
+      const origin = req.headers.origin;
+      if (!origin || new URL(origin).host !== req.headers.host || !["localhost", "127.0.0.1"].includes(new URL(origin).hostname)) return send(res, 403, { error: "A same-origin local workbench request is required." });
+      const task = localAgentTasks.get(localTaskCancel[1]);
+      if (!task || task.status !== "running" || !task.child) return send(res, 404, { error: "No running task found." });
+      task.status = "cancelled"; appendTaskLog(task, "Stopped by the user.\n"); task.child.kill();
+      return send(res, 200, { ok: true });
+    }
 
     if (req.method === "GET" && url.pathname === "/api/status") {
       let id = cookies(req)[sessionCookie];
