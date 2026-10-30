@@ -1,13 +1,13 @@
 import { createServer } from "node:http";
 import { spawn } from "node:child_process";
-import { readFile } from "node:fs/promises";
+import { readFile, stat } from "node:fs/promises";
 import { randomBytes, timingSafeEqual } from "node:crypto";
 import { lookup } from "node:dns/promises";
 import { isIP } from "node:net";
 import { request as httpRequest } from "node:http";
 import { request as httpsRequest } from "node:https";
 import { fileURLToPath } from "node:url";
-import { dirname, join } from "node:path";
+import { dirname, isAbsolute, join, resolve } from "node:path";
 import * as cheerio from "cheerio";
 import puppeteer from "puppeteer-core";
 
@@ -90,18 +90,17 @@ function appendTaskLog(task, text) {
   task.updatedAt = new Date().toISOString();
 }
 
-function startLocalAgentTask(prompt) {
-  const task = { id: randomBytes(12).toString("hex"), prompt, status: "queued", output: "", createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(), exitCode: null };
+function startLocalAgentTask(prompt, workspace) {
+  const task = { id: randomBytes(12).toString("hex"), prompt, workspace, status: "queued", output: "", createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(), exitCode: null };
   localAgentTasks.set(task.id, task);
   activeLocalAgentTask = task.id;
   task.status = "running";
-  const workspace = process.env.LOCAL_AGENT_WORKSPACE || dirname(root);
   const executable = process.env.CODEX_CLI_PATH || "codex";
   const safeEnv = Object.fromEntries(Object.entries(process.env).filter(([name]) => !/(?:PASSWORD|SECRET|TOKEN|API_KEY|CLIENT_ID|CREDENTIAL)/i.test(name)));
   const taskPrompt = `You are Codex running locally for the user. Work in the configured project workspace until the requested deliverable is implemented and verified. Inspect the existing project before changing it. Use the project's established conventions and run relevant checks. Never read, print, or transmit .env files, credentials, auth stores, or secret values; do not bypass authentication, CAPTCHAs, paywalls, or site access controls. Do not send email, publish externally, create public repositories, or deploy unless the user's task explicitly names and authorizes that specific action. If a requested action needs a password, API key, OAuth consent, CAPTCHA, or consequential external approval, stop at that step and tell the user exactly what to complete. For local browser automation, only use an explicitly configured loopback Chrome DevTools endpoint such as http://127.0.0.1:9222; never probe other machines or network ranges.\n\nUSER TASK:\n${prompt}`;
   let child;
   try {
-    child = spawn(executable, ["exec", "--cd", workspace, "--model", process.env.CODEX_MODEL || "gpt-6-luna", "--approve-for-me", "--json", "-"], { cwd: workspace, env: safeEnv, windowsHide: true, stdio: ["pipe", "pipe", "pipe"] });
+    child = spawn(executable, ["exec", "--cd", workspace, "--skip-git-repo-check", "--model", process.env.CODEX_MODEL || "gpt-6-luna", "--approve-for-me", "--json", "-"], { cwd: workspace, env: safeEnv, windowsHide: true, stdio: ["pipe", "pipe", "pipe"] });
   } catch (error) {
     task.status = "failed";
     appendTaskLog(task, `Could not start Codex CLI: ${error.message}\n`);
@@ -561,7 +560,7 @@ export const server = createServer(async (req, res) => {
 
     if (req.method === "GET" && url.pathname === "/api/local-agent/status") {
       const active = activeLocalAgentTask ? localAgentTasks.get(activeLocalAgentTask) : null;
-      return send(res, 200, { enabled: localAgentEnabled(), workspace: localAgentEnabled() ? process.env.LOCAL_AGENT_WORKSPACE || dirname(root) : null, activeTask: active ? { id: active.id, status: active.status, output: active.output, createdAt: active.createdAt, updatedAt: active.updatedAt } : null, tasks: [...localAgentTasks.values()].slice(-10).reverse().map(({ id, status, output, createdAt, updatedAt, exitCode }) => ({ id, status, output, createdAt, updatedAt, exitCode })) });
+      return send(res, 200, { enabled: localAgentEnabled(), workspace: localAgentEnabled() ? process.env.LOCAL_AGENT_WORKSPACE || dirname(root) : null, activeTask: active ? { id: active.id, status: active.status, output: active.output, workspace: active.workspace, createdAt: active.createdAt, updatedAt: active.updatedAt } : null, tasks: [...localAgentTasks.values()].slice(-10).reverse().map(({ id, status, output, workspace, createdAt, updatedAt, exitCode }) => ({ id, status, output, workspace, createdAt, updatedAt, exitCode })) });
     }
     if (req.method === "POST" && url.pathname === "/api/local-agent/tasks") {
       if (!localAgentEnabled()) return send(res, 503, { error: "The task runner is local-only. Start this workbench on your computer with LOCAL_AGENT_ENABLED=true." });
@@ -570,9 +569,14 @@ export const server = createServer(async (req, res) => {
       if (activeLocalAgentTask) return send(res, 409, { error: "One local task is already running. Stop it or wait for it to finish." });
       const input = await readJson(req);
       if (typeof input.prompt !== "string" || !input.prompt.trim() || input.prompt.length > 20_000) return send(res, 400, { error: "Enter a task prompt up to 20,000 characters." });
+      const requestedWorkspace = typeof input.workspace === "string" && input.workspace.trim() ? input.workspace.trim() : process.env.LOCAL_AGENT_WORKSPACE || dirname(root);
+      if (!isAbsolute(requestedWorkspace)) return send(res, 400, { error: "Workspace folder must be an absolute path on this computer." });
+      const workspace = resolve(requestedWorkspace);
+      try { if (!(await stat(workspace)).isDirectory()) return send(res, 400, { error: "Workspace path must point to a folder." }); }
+      catch { return send(res, 400, { error: "Workspace folder does not exist on this computer." }); }
       for (const [id, task] of localAgentTasks) if (task.status !== "running" && localAgentTasks.size > 20) localAgentTasks.delete(id);
-      const task = startLocalAgentTask(input.prompt.trim());
-      return send(res, 202, { task: { id: task.id, status: task.status, output: task.output, createdAt: task.createdAt, updatedAt: task.updatedAt } });
+      const task = startLocalAgentTask(input.prompt.trim(), workspace);
+      return send(res, 202, { task: { id: task.id, status: task.status, output: task.output, workspace: task.workspace, createdAt: task.createdAt, updatedAt: task.updatedAt } });
     }
     const localTaskCancel = /^\/api\/local-agent\/tasks\/([a-f0-9]{24})\/cancel$/.exec(url.pathname);
     if (req.method === "POST" && localTaskCancel) {

@@ -38,6 +38,8 @@ function showMessage(container, text, className = "empty") {
   container.replaceChildren(Object.assign(document.createElement("p"), { className, textContent: text }));
 }
 let activeAgentTaskId = null;
+let agentWorkspaceEdited = false;
+$("#agent-workspace-path").addEventListener("input", () => { agentWorkspaceEdited = true; });
 async function refreshAgentStatus() {
   try {
     const response = await fetch("/api/local-agent/status"); const data = await response.json();
@@ -45,7 +47,8 @@ async function refreshAgentStatus() {
     activeAgentTaskId = running ? data.activeTask.id : null;
     $("#agent-status").textContent = data.enabled ? running ? "Codex task running" : "Local runner ready" : "Local runner only";
     $("#agent-status").className = `count ${data.enabled ? "agent-ready" : ""}`;
-    $("#agent-workspace").textContent = data.enabled ? `Workspace · ${data.workspace}` : "Local workspace not connected";
+    $("#agent-workspace").textContent = data.enabled ? `Workspace · ${data.activeTask?.workspace ?? data.workspace}` : "Local workspace not connected";
+    if (data.enabled && !agentWorkspaceEdited) $("#agent-workspace-path").value = data.workspace;
     $("#agent-help").textContent = data.enabled ? "Describe the finished result you want. Codex can edit files and run project commands in this local workspace; browser sign-in, publishing, and deployment may still need your action." : "Open the project on your PC and start the local runner with npm run local. The hosted Render service cannot run commands on your computer.";
     $("#agent-run").disabled = !data.enabled || running;
     $("#agent-stop").disabled = !running;
@@ -56,7 +59,7 @@ async function refreshAgentStatus() {
 $("#agent-form").addEventListener("submit", async (event) => {
   event.preventDefault(); const button = $("#agent-run"); button.disabled = true;
   try {
-    const response = await fetch("/api/local-agent/tasks", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ prompt: $("#agent-prompt").value.trim() }) });
+    const response = await fetch("/api/local-agent/tasks", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ prompt: $("#agent-prompt").value.trim(), workspace: $("#agent-workspace-path").value.trim() }) });
     const data = await response.json(); if (!response.ok) throw new Error(data.error ?? "Could not start build task");
     toast("Codex task started"); await refreshAgentStatus();
   } catch (error) { toast(error.message); button.disabled = false; }
